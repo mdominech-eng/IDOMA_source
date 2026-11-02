@@ -144,7 +144,6 @@ async function requestVoiceInput() {
   try {
     await api('/api/voice/listen', { method: 'POST' });
     if (label) label.textContent = 'Ti ascolto: parla adesso nel microfono del Lenovo.';
-    await loadRuntimeStatus();
   } catch (error) {
     if (label) {
       label.textContent = 'Microfono non disponibile: ' + error.message;

@@ -1,220 +1,110 @@
-# IDOMA 2.1.0 — Tool Engine e capacità desktop riutilizzabili
+# IDOMA 2.5.0
 
-Questa release introduce il primo Tool Engine di IDOMA. Le richieste vengono instradate verso strumenti riutilizzabili, con parametri strutturati e risultati verificati dall’agente Windows. Non serve aggiungere una regola per ogni applicazione: l’apertura è generica. Si aggiungono ricerca dei file per nome, apertura delle cartelle utente e informazioni essenziali sul PC. Non cancella né sovrascrive i file della vecchia applicazione.
+IDOMA è un assistente personale locale per Windows. Il PC ospita il motore, il database, l'agente desktop, il microfono e le notifiche. L'interfaccia web/PWA permette di usare la chat anche da un altro dispositivo quando il PC è acceso e raggiungibile tramite una connessione privata.
 
-## Garanzia sui dati
+## Stato della release
 
-- Il database predefinito resta `PersonalAI/personal_ai.db` (la cartella che contiene `IDOMA_2.0`).
-- Le tabelle storiche `messaggi`, `memorie` e `ricordi` non vengono eliminate né riscritte.
-- IDOMA 2.0 aggiunge soltanto le tabelle `idoma2_conversations` e `idoma2_messages`.
-- Le memorie precedenti vengono lette direttamente dal database esistente.
-- Non copiare un database vuoto sopra quello esistente.
+Questa release integra:
+- applicazione residente nell'area di notifica di Windows;
+- avvio automatico facoltativo con Windows;
+- server locale e agente desktop avviati insieme;
+- wake phrase **«Hey IDOMA»**, riconoscimento vocale locale con Vosk e Faster-Whisper, risposta vocale con pyttsx3;
+- apertura controllata di applicazioni, cartelle e documenti;
+- memoria personale con protezione contro il ripristino automatico di informazioni dimenticate;
+- promemoria persistenti, notifiche Windows e riepiloghi giornalieri;
+- impostazione locale predefinita e fallback cloud disattivato.
 
-## Avvio su Windows
+Non sono ancora integrati la sincronizzazione con Google/Outlook Calendar, l'accesso alla posta elettronica o una connessione iPhone remota già configurata. Non considerare queste funzioni disponibili finché non vengono collegate e testate.
 
-1. Estrai la cartella `IDOMA_2.0` dentro `C:\Users\<utente>\Documents\PersonalAI`, accanto a `app.py`, `idoma_core.py` e `personal_ai.db`.
-2. Avvia Ollama e verifica che `qwen3:1.7b` sia disponibile.
-3. Fai doppio clic su `avvia_idoma_2.bat`.
-4. Al primo avvio compare un token personale nel terminale. Copialo.
-5. Apri `http://127.0.0.1:8000`, incolla il token in Impostazioni e salva.
+## Requisiti e struttura delle cartelle
 
-L'ambiente virtuale esistente `PersonalAI/.venv` viene riutilizzato. Se non è presente, lo script crea un ambiente dedicato nella cartella `IDOMA_2.0/.venv`.
+La struttura prevista riutilizza il progetto già presente sul PC:
 
-## Agente Windows (azioni sul PC)
+```text
+PersonalAI/
+├── .venv/
+├── personal_ai.db
+├── vosk-model-small-it-0.22/
+├── app.py                  # vecchia applicazione, conservata
+├── main.py                 # vecchia applicazione, conservata
+└── IDOMA_2.0/
+    ├── Avvia IDOMA.bat
+    ├── avvia_desktop.py
+    ├── requirements-v2.txt
+    └── idoma_v2/
+```
 
-Dopo aver avviato il server, apri una seconda finestra del terminale e avvia `run_desktop_agent.bat`. L'agente mantiene il collegamento con il server e accetta azioni strutturate e limitate: apertura di applicazioni individuate tramite collegamenti del menu Start, apertura di siti tramite URL HTTPS validati, Documenti e Download. Non esegue comandi PowerShell o codice arbitrario generato dall'AI.
+Requisiti: Windows 10/11, Python 3.11 o compatibile, Ollama con il modello `qwen3:1.7b`, ambiente virtuale esistente `PersonalAI/.venv` e cartella del modello Vosk italiano `PersonalAI/vosk-model-small-it-0.22`.
 
-Puoi scrivere in linguaggio naturale, ad esempio `Apri TikTok sul mio computer`, `Mi apri il browser?` oppure `Vorrei andare su YouTube`. Il modulo AI estrae l'intenzione e il nome del servizio senza richiedere una regola per ogni frase o applicazione. L'agente cerca prima l'app nel menu Start; se non la trova e il modello conosce con certezza il sito ufficiale, apre il sito HTTPS nel browser. Se non è sicuro dell'indirizzo, non inventa un URL. Se il PC è spento o l'agente non è avviato, IDOMA te lo segnala. Per un server cloud, imposta `IDOMA_SERVER_URL` nell'ambiente del PC in modo che punti al dominio pubblico HTTPS.
+Faster-Whisper usa il modello `base` per impostazione predefinita. Se non è già presente nella cache, il primo avvio può scaricarlo. La successiva trascrizione avviene localmente.
 
-## iPhone
+## Avvio
 
-Questa PWA è già responsive. Per provarla mentre il PC è acceso, iPhone e PC devono essere sulla stessa rete Wi-Fi. Sul telefono apri l'indirizzo LAN del PC, non `127.0.0.1` (ad esempio `http://192.168.x.x:8000`). Windows Firewall potrebbe chiedere di autorizzare Python sulla rete privata.
+1. Estrai `IDOMA_2.0` dentro la cartella `PersonalAI`, accanto al database e al modello Vosk.
+2. Verifica che Ollama sia avviato e che `qwen3:1.7b` sia installato.
+3. Fai doppio clic su **`IDOMA_2.0/Avvia IDOMA.bat`**.
+4. Se mancano dipendenze, il launcher le installa nell'ambiente virtuale esistente. Non crea un secondo ambiente.
+5. IDOMA avvia il server, l'agente Windows e i servizi di promemoria. L'icona resta accanto all'orologio.
+6. Dal menu dell'icona scegli **Apri IDOMA**. Al primo accesso, scegli **Copia token API** dal menu dell'icona, incollalo in Impostazioni nell'interfaccia web e salva.
 
-Per installarla: apri l'indirizzo HTTPS del server in Safari, premi Condividi e scegli **Aggiungi alla schermata Home**.
+Dal menu dell'icona puoi anche:
+- attivare o disattivare **Ascolto vocale attivo**;
+- abilitare **Avvia con Windows**;
+- scegliere **Esci da IDOMA** per arrestare i servizi.
 
-**Importante:** questa prova in rete locale non rende IDOMA indipendente dal PC. Per usarlo quando il Lenovo è spento, il backend deve essere pubblicato su un server cloud sempre raggiungibile, con database persistente e un provider AI online configurato. La PWA è già predisposta a collegarsi a un URL server diverso da quello locale.
+## Voce
 
-## Modelli AI
+La wake phrase è **«Hey IDOMA»**. Puoi pronunciare il comando nella stessa frase, per esempio:
 
-Il router usa Ollama in locale. **Il cloud è disattivato per impostazione predefinita**, anche se hai inserito le credenziali. Per autorizzare esplicitamente l’invio di richieste e contesto al provider online, imposta `IDOMA_ALLOW_CLOUD=1` nel file `.env`; per mantenere il comportamento locale lascia `IDOMA_ALLOW_CLOUD=0`.
+- «Hey IDOMA, apri Spotify».
+- «Hey IDOMA, cerca il PDF della tesi».
+- «Hey IDOMA, ricordami di chiamare mamma domani alle 10».
 
-Per il cloud crea un file `.env` copiando `.env.example` e inserisci i valori sul server, mai nel JavaScript della PWA. L'uso di un provider cloud può comportare costi: non è attivato automaticamente.
+Vosk rileva la wake phrase; Faster-Whisper trascrive il comando in italiano; pyttsx3 legge la risposta. Il microfono può essere disattivato dal menu dell'icona. Il comportamento va ancora verificato sul microfono reale del Lenovo: soglia audio, rumore ambientale e disponibilità della voce italiana possono richiedere regolazioni.
 
-## Comandi memoria
+## Promemoria e riepiloghi
 
-- `/memoria` — mostra i ricordi già presenti nel database.
-- `/ricorda ...` — aggiunge un ricordo nella tabella storica `ricordi`.
-- `/dimentica ...` — elimina dalla tabella `ricordi` i ricordi che contengono il testo indicato.
+Esempi di richieste:
 
-## Architettura inclusa
+- `Ricordami di chiamare mamma domani alle 10:30`
+- `Ricordami di pagare la bolletta tra 20 minuti`
+- `Ricordami di inviare il documento il 03/11 alle 9`
 
-- `idoma_v2/server`: API FastAPI e autenticazione Bearer.
-- `idoma_v2/services`: orchestrazione conversazioni e memoria.
-- `idoma_v2/providers`: instradamento tra Ollama e provider cloud OpenAI-compatible.
-- `idoma_v2/web`: interfaccia web installabile come PWA.
-- `idoma_v2/desktop_agent.py`: agente Windows con coda di attività e allowlist di azioni.
+Se manca l'orario, IDOMA chiede di specificarlo. Puoi anche usare:
 
-## Limiti espliciti di questa release
+- `/promemoria` per vedere i promemoria attivi;
+- `/completa 3` per completare il promemoria con ID 3;
+- `/rimanda 3 10` per rimandarlo di dieci minuti;
+- `/oggi` oppure «Organizza la giornata» per un riepilogo.
 
-Questa è la nuova base backend/mobile, con apertura generica delle app e dei siti, non ancora la sostituzione completa dell'applicazione desktop precedente. Le azioni Windows (aprire programmi, gestire file locali), la voce integrata, i collegamenti a email/calendario e la distribuzione cloud definitiva sono i moduli successivi da collegare. Il vecchio `app.py`, `idoma_core.py`, `test_voce.py` e `personal_ai.db` restano al loro posto e continuano a essere disponibili.
+Le notifiche dei promemoria arrivano su Windows. I riepiloghi automatici sono impostati alle **08:00** e alle **21:00**. Puoi cambiare gli orari in `.env` tramite `IDOMA_MORNING_BRIEFING_TIME` e `IDOMA_EVENING_BRIEFING_TIME`; lascia il valore vuoto per disattivare il relativo riepilogo. Se IDOMA viene avviata entro quattro ore dall'orario programmato, recupera il riepilogo una sola volta.
 
-## Pubblicazione cloud
+Queste funzioni si basano sui promemoria locali. Il calendario esterno non è ancora sincronizzato.
 
-Il `Dockerfile` prepara il backend per un host Docker. Prima della pubblicazione occorre configurare:
-- `IDOMA_ENV=production`
-- `IDOMA_API_TOKEN` con un segreto casuale lungo
-- `IDOMA_DB_PATH` su un volume persistente
-- un provider AI cloud, se il PC non deve essere acceso
-- HTTPS e un dominio pubblico
+## Privacy e accesso remoto
 
-Non pubblicare il servizio con il database su disco effimero: i dati potrebbero andare persi al riavvio o a una nuova distribuzione.
+- Il server ascolta su `127.0.0.1` per impostazione predefinita.
+- Il token API viene conservato in `IDOMA_2.0/.idoma_token`; puoi copiarlo dal menu dell'icona. Non condividerlo e non caricarlo su GitHub.
+- Il fallback verso un provider cloud è disattivato. Per autorizzarlo esplicitamente, imposta `IDOMA_ALLOW_CLOUD=1` nel file `.env` e configura il provider.
+- Non esporre la porta HTTP 8000 direttamente su Internet. Per l'accesso da iPhone usa una VPN o un tunnel cifrato. Il PC deve essere acceso e IDOMA in esecuzione.
+- La PWA non è un backend cloud sempre attivo: con il PC spento, le funzioni locali e le notifiche non possono essere eseguite.
 
+## Database e compatibilità con la vecchia applicazione
 
-## IDOMA 2.0.2 fixes
+Il percorso predefinito del database resta `PersonalAI/personal_ai.db`. IDOMA aggiunge tabelle con prefisso `idoma2_`; non elimina né sovrascrive le tabelle storiche `messaggi`, `memorie` e `ricordi`. Le vecchie applicazioni e i relativi file vengono conservati.
 
-- The chat waits briefly for the Desktop Agent and reports the actual Windows result or error instead of claiming that a queued task succeeded.
-- Desktop Agent polls every second and logs each received task.
-- Generic open-intent parsing falls back to a deterministic parser even when the local model returns `action=none`.
-- Exact Start Menu shortcut matches are checked before fuzzy matching, and desktop search is limited to top-level shortcuts.
-- Existing `personal_ai.db` is retained; no database deletion or reset is performed.
-- Generic Windows URI-protocol fallback can launch apps registered with a protocol handler (without maintaining a per-app list).
+**Non sostituire mai `personal_ai.db` con un database vuoto.** Prima di provare una nuova release, chiudi IDOMA e fai una copia di sicurezza del database.
 
+## Test
 
-## IDOMA 2.0.3 — correzione estrazione del nome dell'app
+Dalla cartella `IDOMA_2.0`, con l'ambiente virtuale attivato:
 
-- Il nome dell'applicazione viene separato dalle formule conversazionali (ad esempio "un attimo", "un secondo", "per favore").
-- Quando il modello AI estrae correttamente il nome dell'app, il parser non lo sovrascrive più con la frase letterale non ripulita.
-- Il parser deterministico resta come fallback se il modello non restituisce un'entità utilizzabile.
-- I test includono richieste come "puoi aprire un attimo spotify?" e "mi apri Spotify un secondo, per favore?".
+```powershell
+python -m unittest discover -s tests -v
+```
 
+La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, promemoria e coda delle attività desktop. I test automatici non sostituiscono la prova sul Lenovo: microfono, wake phrase, TTS, avvio automatico e notifiche Windows devono essere verificati sul dispositivo reale.
 
-## IDOMA 2.1.0 — Tool Engine
+## Versione
 
-Il catalogo degli strumenti è consultabile tramite `GET /api/tools` (richiede il token). Le capacità Windows disponibili in questa release sono:
-
-- `open_target`: apre applicazioni installate o siti HTTPS, senza un elenco fisso di app.
-- `search_files`: cerca per nome nelle cartelle Desktop, Documenti e Download; non legge il contenuto dei file. La ricerca è limitata a 5.000 file per mantenere il PC reattivo.
-- `open_folder`: apre Desktop, Documenti o Download.
-- `open_path`: apre un percorso solo se si trova in una delle cartelle utente autorizzate.
-- `pc_status`: restituisce nome del PC, sistema operativo e spazio disco disponibile.
-
-Il Desktop Agent esegue esclusivamente strumenti registrati. Non esegue comandi PowerShell, script o codice generato dal modello. L’apertura di percorsi locali è confinata alle cartelle utente indicate; la ricerca è limitata ai nomi dei file.
-
-### Test della release
-
-I test automatici coprono l’estrazione delle intenzioni di apertura e il routing delle nuove capacità. Per questa build sono stati eseguiti 17 test automatici e la compilazione dei moduli Python. Il test finale dell’esecuzione delle azioni deve comunque essere effettuato sul PC Windows dell’utente.
-
-### Prossime fasi
-
-1. Memoria personale strutturata e recupero più pertinente, senza alterare i ricordi esistenti.
-2. Strumenti documentali: lettura controllata di PDF e documenti, con conferma quando necessario.
-3. Integrazioni email e calendario tramite autorizzazioni esplicite.
-4. Pubblicazione cloud con database persistente e provider AI online, per rendere l’iPhone indipendente dal PC.
-
-
-## IDOMA 2.2.0 — Memoria personale e cartelle Windows
-
-Questa release aggiunge una memoria strutturata per associazioni personali e amplia la gestione delle cartelle. Le tabelle storiche `messaggi`, `memorie` e `ricordi` non vengono eliminate né riscritte. La nuova tabella `idoma2_memory_facts` viene aggiunta in modo non distruttivo allo stesso database.
-
-### Insegnare un'associazione a IDOMA
-
-Puoi scrivere in chat, per esempio:
-
-- `Ricorda che il mio curriculum si chiama CB`
-- `Quando dico CV intendo CB`
-- `/associa curriculum = CB`
-
-IDOMA salva l'associazione come fatto strutturato e la riutilizza nelle successive ricerche per nome. Per curriculum riconosce anche gli alias `CV`, `curriculum vitae` e `resume`; per tesi riconosce `tesi magistrale` e `thesis`. Le associazioni possono essere aggiornate ripetendo l'istruzione con un valore nuovo. `/memoria` mostra sia i ricordi storici sia i fatti strutturati.
-
-### Cartelle personali Windows
-
-L'agente risolve Desktop, Documenti, Download, Immagini, Musica e Video usando gli identificativi Known Folder di Windows, quindi funziona anche se le cartelle sono state rinominate, spostate o reindirizzate a OneDrive. Sono supportati alias italiani e inglesi come `galleria`, `foto`, `immagini`, `music` e `musica`.
-
-### Ricerca file
-
-La ricerca esamina i nomi dei file nelle cartelle personali disponibili, non i contenuti dei documenti. I termini brevi come `CB` vengono confrontati come parole complete, evitando corrispondenze casuali dentro parole più lunghe. Sono previsti limiti di sicurezza di 25.000 file o 7 secondi per mantenere il PC reattivo. I valori associati in memoria vengono aggiunti automaticamente alla ricerca.
-
-### Test
-
-Esegui i test da `IDOMA_2.0` con:
-
-`python -m unittest discover -s tests -v`
-
-La prova finale di apertura delle cartelle deve essere eseguita sul PC Windows dell'utente.
-
-
-## IDOMA 2.3.0 — ricerca dentro i documenti
-
-Questa release aggiunge la ricerca del contenuto, oltre alla ricerca dei nomi dei file. L'agente Windows può estrarre testo da PDF, Word `.docx`, Excel `.xlsx`, PowerPoint `.pptx` e file `.txt`, `.md`, `.csv` e `.rtf`. Per ogni risultato mostra nome, percorso e un estratto con riferimento a pagina, paragrafo, foglio o diapositiva quando disponibile. I file Word/Excel/PowerPoint nei vecchi formati binari `.doc`, `.xls` e `.ppt` non sono ancora supportati. I PDF composti soltanto da immagini/scansioni richiedono OCR e non vengono letti da questa versione.
-
-L'indice dei documenti è conservato nella nuova tabella `idoma2_document_index` del database locale `personal_ai.db`: non viene creato un secondo archivio di testi e non vengono eliminate o modificate le tabelle precedenti. I documenti vengono reindicizzati solo quando cambia dimensione o data di modifica. Per contenere l'uso di memoria, l'indice gestisce fino a 1.200 documenti e conserva fino a 80.000 caratteri per file; la scansione è inoltre limitata a 24 secondi per richiesta. Se raggiunge un limite, IDOMA lo segnala e puoi ripetere la ricerca.
-
-Esempi: `Trova il documento in cui si parla del progetto iDOMA`, `In quale file avevo scritto PID controller?`, `Cerca dentro i PDF la frase recupero del calore`, `Cerca nel contenuto dei documenti sostenibilità`. La ricerca è locale, per parole e frasi, non un sistema semantico/AI né OCR.
-
-
-## IDOMA 2.3.1
-
-- Le richieste come "trova sustainability nei miei file" vengono instradate alla ricerca nel contenuto dei documenti, non alla ricerca per nome.
-- Le domande "dove ho scritto ..." e "in quali file ho scritto ..." sono riconosciute come ricerche documentali.
-- Il limite della risposta dell'agente Windows è stato portato a 12.000 caratteri, evitando HTTP 422 quando la ricerca restituisce più risultati.
-
-
-## IDOMA 2.3.2 — memoria personale affidabile
-
-- Il pulsante iniziale **La mia memoria** invia direttamente `/memoria`; la richiesta non può più essere confusa con l'apertura di un sito. Anche frasi naturali come "Cosa ricordi di me?" e "Mostrami cosa ricordi di me usando il comando /memoria" vengono instradate alla memoria.
-- Le istruzioni esplicite "Ricorda che mi chiamo Marco", "Ricordati che mi chiamo Marco" e "Tieni a mente che il mio nome è Marco" vengono salvate nella memoria personale strutturata.
-- Le domande "Come mi chiamo?" e "Qual è il mio nome?" vengono risolte direttamente dalla memoria locale, senza attendere il modello AI.
-- Al primo accesso dopo l'aggiornamento, IDOMA recupera anche le istruzioni esplicite sul nome presenti nelle conversazioni già salvate, così da non perdere un'informazione scritta prima di questa versione.
-- Le modifiche sono additive: non vengono cancellati o sovrascritti i database, le conversazioni o i ricordi esistenti.
-
-Test automatici della release: 44 test superati.
-
-
-## IDOMA 2.3.3 — privacy e memoria affidabile
-
-- Il provider cloud è ora disabilitato per impostazione predefinita. La presenza di una chiave API non autorizza da sola l'invio di dati: serve `IDOMA_ALLOW_CLOUD=1`.
-- Il comando `/dimentica` rimuove anche le voci corrispondenti dalla vecchia tabella `memorie`, quando presente.
-- Le informazioni dimenticate ricevono un blocco di recupero, così la scansione della cronologia non le reinserisce automaticamente. Un nuovo comando esplicito `/ricorda` può salvarle di nuovo.
-- Il recupero automatico di vecchie istruzioni di memoria è limitato alla conversazione attiva.
-- Il contesto strutturato inviato al modello viene filtrato in base alla richiesta, anziché includere indiscriminatamente tutti i fatti.
-- Le richieste negative come `Non aprire Spotify` o `Non cercare il PDF` non vengono trasformate in azioni desktop.
-
-
-## IDOMA 2.3.4 — attività desktop senza bloccare la chat
-
-- Le richieste Windows vengono messe in coda e confermate subito, senza bloccare la risposta per 14–38 secondi.
-- La chat controlla lo stato dell'attività e aggiorna il messaggio quando l'agente Windows termina.
-- Il risultato finale viene salvato nella conversazione; se l'utente cambia chat e torna in seguito, IDOMA riprende il controllo delle attività ancora in corso.
-- La coda collega ogni attività al messaggio che l'ha generata e gestisce anche il caso in cui l'agente termini prima che il collegamento sia stato registrato.
-
-
-## App desktop Windows (IDOMA 2.5.0)
-
-Esegui `Avvia IDOMA.bat` dalla cartella `IDOMA_2.0`. Il programma avvia il server locale e l'agente Windows, resta nell'area di notifica e offre **Apri IDOMA**, **Copia token API**, **Ascolto vocale attivo**, **Avvia con Windows** ed **Esci da IDOMA**.
-
-L'ascolto vocale usa Vosk per la wake phrase **“Hey IDOMA”**, Faster-Whisper per trascrivere il comando in italiano e pyttsx3 per la risposta. I modelli sono eseguiti in locale; il modello Vosk già presente deve rimanere in `PersonalAI\vosk-model-small-it-0.22`. Faster-Whisper usa il modello `base` per impostazione predefinita e può scaricarlo al primo avvio se non è già nella cache locale. Il menu dell'icona consente di disattivare il microfono. Puoi dire **“Hey IDOMA, apri Spotify”** in un'unica frase: il servizio conserva l'audio della wake phrase e passa a Whisper anche il comando che segue; se pronunci soltanto la wake phrase, IDOMA ti chiede cosa fare.
-
-Il server ascolta su `127.0.0.1` per impostazione predefinita. Non esporre la porta HTTP direttamente su Internet. Per l'accesso da iPhone usa una VPN o un tunnel cifrato; l'accesso remoto richiede il PC acceso.
-
-
-## Promemoria locali
-
-- Puoi creare un promemoria con frasi come `Ricordami di chiamare mamma domani alle 10:30`, `Ricordami di pagare la bolletta tra 20 minuti` oppure `Ricordami di inviare il documento il 03/11 alle 9`.
-- Se manca l'orario, IDOMA chiede un chiarimento invece di inventarlo.
-- `/promemoria` mostra i promemoria attivi; `/completa ID` li completa; `/rimanda ID 10` li rimanda di dieci minuti.
-- Il servizio locale controlla le scadenze e mostra una notifica Windows. I promemoria restano nel database personale e vengono conservati tra un riavvio e l'altro.
-- La sezione **Promemoria** nella barra laterale consente di vedere gli appuntamenti in arrivo e completare quelli terminati.
-- Per ricevere notifiche il PC deve essere acceso e IDOMA deve essere in esecuzione.
-
-
-### Affidabilità della coda desktop
-
-Le attività Windows rimaste nello stato `running` per oltre cinque minuti vengono rimesse automaticamente in coda. Questo consente di recuperare richieste interrotte da un arresto o da un riavvio imprevisto del PC.
-
-
-Puoi chiedere **«Organizza la giornata»**, **«Cosa devo fare oggi?»** oppure usare `/oggi` per ottenere un riepilogo dei promemoria scaduti, di quelli previsti oggi e dei prossimi in programma. Il riepilogo non inventa eventi: segnala chiaramente che un calendario esterno non è ancora collegato.
-
-
-### Briefing proattivi
-
-IDOMA mostra un riepilogo automatico al mattino e alla sera, basato sui promemoria locali. Gli orari predefiniti sono **08:00** e **21:00**; puoi modificarli nel file `.env` tramite `IDOMA_MORNING_BRIEFING_TIME` e `IDOMA_EVENING_BRIEFING_TIME`. Lascia uno dei valori vuoto per disattivare quel riepilogo. Se IDOMA viene avviata entro quattro ore dall'orario previsto, recupera il riepilogo una sola volta.
+`2.5.0` — desktop Windows, voce locale, promemoria e briefing proattivi.

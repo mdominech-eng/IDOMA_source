@@ -1,0 +1,18 @@
+# Personal and machine-specific files
+.env
+**/.env
+.idoma_token
+**/.idoma_token
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+personal_ai.db
+personal_ai.db-wal
+personal_ai.db-shm
+*.sqlite
+*.sqlite3
+*.db
+vosk-model*/
+backup*/

@@ -38,6 +38,8 @@ Requisiti: Windows 10/11, Python 3.11 o compatibile, Ollama con il modello `qwen
 
 Faster-Whisper usa il modello `base` per impostazione predefinita. Se non è già presente nella cache, il primo avvio può scaricarlo. La successiva trascrizione avviene localmente.
 
+Per personalizzare porta, provider, orari dei briefing o soglia del microfono, copia `IDOMA_2.0/.env.example` in `IDOMA_2.0/.env` e modifica i valori desiderati. Il file `.env` non va caricato su GitHub.
+
 ## Avvio
 
 1. Estrai `IDOMA_2.0` dentro la cartella `PersonalAI`, accanto al database e al modello Vosk.

@@ -553,6 +553,15 @@ def _pc_status() -> str:
             f"Spazio libero sul disco principale: {free_gb:.1f} GB su {total_gb:.1f} GB.")
 
 
+def _open_user_url(url: str) -> str:
+    parsed = urlparse(url)
+    local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if (parsed.scheme != "https" and not local_http) or not parsed.netloc or parsed.username or parsed.password:
+        raise ValueError("Sono ammessi solo indirizzi HTTPS e HTTP verso il PC locale.")
+    webbrowser.open(url)
+    return f"Aperto il sito {url}."
+
+
 def execute_task(action: str, payload: dict) -> str:
     """Execute only registered, constrained desktop tools. Never run generated shell commands."""
     if os.name != "nt":
@@ -606,13 +615,7 @@ def execute_task(action: str, payload: dict) -> str:
         return f"Aperta la cartella {path}."
 
     if action == "open_url":
-        url = str(payload.get("url", ""))
-        parsed = urlparse(url)
-        local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
-        if (parsed.scheme != "https" and not local_http) or not parsed.netloc or parsed.username or parsed.password:
-            raise ValueError("Sono ammessi solo indirizzi HTTPS e HTTP verso il PC locale.")
-        webbrowser.open(url)
-        return f"Aperto il sito {url}."
+        return _open_user_url(str(payload.get("url", "")))
 
     raise ValueError(f"Azione non autorizzata: {action}")
 

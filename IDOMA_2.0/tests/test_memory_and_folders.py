@@ -85,12 +85,12 @@ class ProtocolSafetyTests(unittest.TestCase):
 
     def test_open_url_rejects_external_http(self):
         with self.assertRaises(ValueError):
-            desktop_agent.execute_task("open_url", {"url": "http://example.com"})
+            desktop_agent._open_user_url("http://example.com")
 
     def test_open_url_accepts_https_and_local_http(self):
         with patch.object(desktop_agent.webbrowser, "open") as open_browser:
-            self.assertIn("Aperto", desktop_agent.execute_task("open_url", {"url": "https://example.com"}))
-            self.assertIn("Aperto", desktop_agent.execute_task("open_url", {"url": "http://127.0.0.1:8000"}))
+            self.assertIn("Aperto", desktop_agent._open_user_url("https://example.com"))
+            self.assertIn("Aperto", desktop_agent._open_user_url("http://127.0.0.1:8000"))
         self.assertEqual(open_browser.call_count, 2)
 
 

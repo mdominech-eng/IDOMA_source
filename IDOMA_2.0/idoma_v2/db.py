@@ -327,7 +327,14 @@ def queue_agent_task(action: str, payload: dict | None = None) -> int:
 def claim_agent_task() -> dict | None:
     import json
     now = utc_now()
+    stale_before = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec="seconds")
     with connection() as conn:
+        # Recover a task left running by a crash or forced shutdown.
+        conn.execute(
+            "UPDATE idoma2_agent_tasks SET status='queued', updated_at=? "
+            "WHERE status='running' AND updated_at<?",
+            (now, stale_before),
+        )
         row = conn.execute("SELECT id, action, payload FROM idoma2_agent_tasks WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
         if not row:
             return None

@@ -205,3 +205,8 @@ Il server ascolta su `127.0.0.1` per impostazione predefinita. Non esporre la po
 - Il servizio locale controlla le scadenze e mostra una notifica Windows. I promemoria restano nel database personale e vengono conservati tra un riavvio e l'altro.
 - La sezione **Promemoria** nella barra laterale consente di vedere gli appuntamenti in arrivo e completare quelli terminati.
 - Per ricevere notifiche il PC deve essere acceso e IDOMA deve essere in esecuzione.
+
+
+### Affidabilità della coda desktop
+
+Le attività Windows rimaste nello stato `running` per oltre cinque minuti vengono rimesse automaticamente in coda. Questo consente di recuperare richieste interrotte da un arresto o da un riavvio imprevisto del PC.

@@ -60,6 +60,18 @@ class DesktopTaskLifecycleTests(unittest.TestCase):
         self.assertEqual(item["agent_task_id"], task_id)
         self.assertEqual(item["agent_task_status"], "queued")
 
+    def test_stale_running_task_is_requeued_after_a_crash(self):
+        task_id = db.queue_agent_task("open_folder", {"folder": "documents"})
+        first_claim = db.claim_agent_task()
+        self.assertEqual(first_claim["id"], task_id)
+        with db.connection() as conn:
+            conn.execute(
+                "UPDATE idoma2_agent_tasks SET updated_at=? WHERE id=?",
+                ("2000-01-01T00:00:00+00:00", task_id),
+            )
+        second_claim = db.claim_agent_task()
+        self.assertEqual(second_claim["id"], task_id)
+
     def test_task_completion_updates_pending_chat_message(self):
         conversation = assistant.new_conversation()
         task_id = db.queue_agent_task("open_folder", {"folder": "documents"})

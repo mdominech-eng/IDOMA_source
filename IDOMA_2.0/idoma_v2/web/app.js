@@ -85,7 +85,7 @@ async function sendMessage(text = null) {
     const result = await api('/api/chat', { method: 'POST', body: JSON.stringify({ message, conversation_id: requestConversationId }) });
     typing.remove();
     // Do not inject a late reply into a different conversation opened while the request was running.
-    if (state.conversationId !== requestConversationId) return;
+    if (state.conversationId !== requestConversationId) { await loadConversations(); return; }
     state.conversationId = result.conversation_id;
     const assistantBody = addMessage('assistant', result.reply);
     if (result.pending && result.task_id) pollAgentTask(result.task_id, assistantBody);

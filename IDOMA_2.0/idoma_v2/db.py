@@ -323,12 +323,20 @@ def claim_agent_task() -> dict | None:
 
 
 def link_agent_task_message(task_id: int, message_id: int) -> None:
-    """Associate the pending chat bubble with its desktop task for durable updates."""
+    """Associate the pending chat bubble with its task, including the fast-completion race."""
     with connection() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO idoma2_agent_task_messages(task_id, message_id) VALUES (?, ?)",
             (task_id, message_id),
         )
+        task = conn.execute(
+            "SELECT status, result FROM idoma2_agent_tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+        if task and task["status"] in {"done", "failed"}:
+            result = str(task["result"] or "")
+            final_message = f"Fatto: {result}" if task["status"] == "done" else f"Non sono riuscito a completare l'attività: {result}"
+            conn.execute("UPDATE idoma2_messages SET content=? WHERE id=?", (final_message, message_id))
 
 
 def finish_agent_task(task_id: int, result: str, success: bool) -> None:

@@ -26,6 +26,50 @@ class ProviderPrivacyTests(unittest.TestCase):
             cloud.assert_called_once()
 
 
+import tempfile
+from pathlib import Path
+import idoma_v2.db as db
+
+
+class DesktopTaskLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_patch = patch.object(db, "DB_PATH", Path(self.tmp.name) / "idoma.sqlite3")
+        self.db_patch.start()
+        db.init_db()
+
+    def tearDown(self):
+        self.db_patch.stop()
+        self.tmp.cleanup()
+
+    def test_desktop_action_returns_without_waiting_for_windows(self):
+        with patch.object(assistant, "agent_is_online", return_value=True):
+            with patch.object(assistant, "detect_additional_tool", return_value=("open_folder", {"folder": "documents"})):
+                result = assistant.process_message("Apri la cartella Documenti")
+        self.assertTrue(result["pending"])
+        self.assertIn("task_id", result)
+        messages = db.get_messages(result["conversation_id"])
+        self.assertIn("Ti aggiornerò qui", messages[-1]["content"])
+
+    def test_task_completion_updates_pending_chat_message(self):
+        conversation = assistant.new_conversation()
+        task_id = db.queue_agent_task("open_folder", {"folder": "documents"})
+        message_id = db.save_message(conversation["id"], "assistant", "Operazione in corso")
+        db.link_agent_task_message(task_id, message_id)
+        db.finish_agent_task(task_id, "Aperta la cartella Documenti.", True)
+        messages = db.get_messages(conversation["id"])
+        self.assertEqual(messages[-1]["content"], "Fatto: Aperta la cartella Documenti.")
+
+    def test_linking_after_fast_completion_updates_pending_message(self):
+        conversation = assistant.new_conversation()
+        task_id = db.queue_agent_task("open_folder", {"folder": "documents"})
+        message_id = db.save_message(conversation["id"], "assistant", "Operazione in corso")
+        db.finish_agent_task(task_id, "Aperta la cartella Documenti.", True)
+        db.link_agent_task_message(task_id, message_id)
+        messages = db.get_messages(conversation["id"])
+        self.assertEqual(messages[-1]["content"], "Fatto: Aperta la cartella Documenti.")
+
+
 class DesktopActionSafetyTests(unittest.TestCase):
     def test_negated_app_open_does_not_call_ai_or_open(self):
         with patch.object(assistant, "ask_ai", side_effect=AssertionError("AI must not be called")):

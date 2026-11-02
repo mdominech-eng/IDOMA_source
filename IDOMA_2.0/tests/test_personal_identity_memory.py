@@ -84,7 +84,7 @@ class PersonalIdentityMemoryTests(unittest.TestCase):
         db.save_memory_fact("file_alias", "curriculum", "CB", ["CV"])
         db.save_memory_fact("personal", "nome", "Marco", ["nome"])
         context = structured_memory_context("Dove si trova il mio curriculum?", 10)
-        self.assertEqual(context, ["curriculum: CB (alias: curriculum, CV)"])
+        self.assertEqual(context, ["curriculum: CB (alias: CV)"])
 
 
 if __name__ == "__main__":

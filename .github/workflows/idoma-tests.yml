@@ -21,6 +21,8 @@ jobs:
           cache-dependency-path: IDOMA_2.0/requirements-v2.txt
       - name: Install dependencies
         run: python -m pip install -r requirements-v2.txt
+      - name: Compile Python sources
+        run: python -m compileall -q idoma_v2 tests
       - name: Run unit tests
         env:
           IDOMA_API_TOKEN: ci-test-token

@@ -68,6 +68,29 @@ class AgentThread(QThread):
         self.stop_event.set()
 
 
+class ReminderThread(QThread):
+    reminder_due = Signal(dict)
+
+    def __init__(self):
+        super().__init__()
+        self.stop_event = threading.Event()
+
+    def stop(self):
+        self.stop_event.set()
+
+    def run(self):
+        from .db import get_due_reminders, mark_reminder_notified
+        while not self.stop_event.is_set():
+            try:
+                for item in get_due_reminders():
+                    if mark_reminder_notified(item["id"]):
+                        self.reminder_due.emit(item)
+            except Exception:
+                # A temporary database lock must not terminate the reminder service.
+                pass
+            self.stop_event.wait(15.0)
+
+
 class VoiceThread(QThread):
     status = Signal(str)
 
@@ -119,6 +142,7 @@ class IdomaTrayController(QObject):
         self.application = application
         self.server_thread = ApiServerThread()
         self.agent_thread = AgentThread()
+        self.reminder_thread = ReminderThread()
         self.agent_started = False
         self.voice_thread = None
         self.server_ready = False
@@ -161,6 +185,7 @@ class IdomaTrayController(QObject):
 
         self.server_thread.failed.connect(self.on_server_error)
         self.agent_thread.status.connect(self.on_agent_status)
+        self.reminder_thread.reminder_due.connect(self.on_reminder_due)
         self.server_thread.start()
 
         self.startup_timer = QTimer(self)
@@ -179,6 +204,8 @@ class IdomaTrayController(QObject):
                 self.agent_thread.start()
             if self.voice_action.isChecked():
                 self.start_voice()
+            if not self.reminder_thread.isRunning():
+                self.reminder_thread.start()
             self.tray.showMessage("IDOMA", "Server locale e agente desktop avviati.", QSystemTrayIcon.MessageIcon.Information, 3500)
         elif not self.server_thread.isRunning():
             self.startup_timer.stop()
@@ -258,6 +285,15 @@ class IdomaTrayController(QObject):
         elif "ascolto vocale disattivato" in lowered:
             self.tray.setToolTip("IDOMA · assistente personale")
 
+    def on_reminder_due(self, reminder: dict):
+        title = str(reminder.get("title") or "Promemoria")
+        self.tray.showMessage(
+            "IDOMA · Promemoria",
+            title,
+            QSystemTrayIcon.MessageIcon.Information,
+            10000,
+        )
+
     def on_server_error(self, message: str):
         self.tray.showMessage("IDOMA", f"Errore del server: {message}", QSystemTrayIcon.MessageIcon.Critical, 7000)
 
@@ -312,6 +348,9 @@ class IdomaTrayController(QObject):
         if hasattr(self, "startup_timer"):
             self.startup_timer.stop()
         self.stop_voice(wait_for_exit=True)
+        self.reminder_thread.stop()
+        if self.reminder_thread.isRunning():
+            self.reminder_thread.wait(5000)
         self.agent_thread.stop()
         if self.agent_thread.isRunning():
             self.agent_thread.wait(15000)

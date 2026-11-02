@@ -47,6 +47,59 @@ function setBusy(busy) {
   state.busy = busy; $('sendButton').disabled = busy; $('messageInput').disabled = busy;
   $('sendButton').textContent = busy ? '…' : '↑';
 }
+async function loadReminders() {
+  const host = $('reminderList');
+  if (!host) return;
+  try {
+    const items = await api('/api/reminders');
+    host.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'reminder-empty';
+      empty.textContent = 'Nessun promemoria';
+      host.appendChild(empty);
+      return;
+    }
+    for (const item of items.slice(0, 8)) {
+      const row = document.createElement('div');
+      row.className = 'reminder-item';
+      const content = document.createElement('div');
+      content.className = 'reminder-copy';
+      const title = document.createElement('div');
+      title.className = 'reminder-title';
+      title.textContent = item.title;
+      const due = document.createElement('div');
+      due.className = 'reminder-due';
+      due.textContent = new Date(item.due_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+      content.append(title, due);
+      const done = document.createElement('button');
+      done.className = 'reminder-complete';
+      done.type = 'button';
+      done.textContent = '✓';
+      done.title = 'Completa promemoria';
+      done.setAttribute('aria-label', `Completa: ${item.title}`);
+      done.addEventListener('click', async () => {
+        done.disabled = true;
+        try {
+          await api(`/api/reminders/${encodeURIComponent(item.id)}/complete`, { method: 'POST' });
+          await loadReminders();
+        } catch (error) {
+          done.disabled = false;
+          setConnection(false, `Promemoria: ${error.message}`);
+        }
+      });
+      row.append(content, done);
+      host.appendChild(row);
+    }
+  } catch (error) {
+    host.replaceChildren();
+    const unavailable = document.createElement('div');
+    unavailable.className = 'reminder-empty';
+    unavailable.textContent = 'Promemoria non disponibili';
+    host.appendChild(unavailable);
+  }
+}
+
 async function loadConversations() {
   const items = await api('/api/conversations');
   state.conversations = items;
@@ -97,6 +150,7 @@ async function sendMessage(text = null) {
     if (result.pending && result.task_id) pollAgentTask(result.task_id, assistantBody);
     setConnection(true, `Connesso · ${result.provider === 'unavailable' ? 'AI non disponibile' : result.provider}`);
     await loadConversations();
+    await loadReminders();
   } catch (error) {
     typing.remove();
     if (state.conversationId === requestConversationId) {
@@ -139,7 +193,7 @@ async function verifyConnection() {
   try {
     await api('/api/health'); await api('/api/conversations');
     $('settingsStatus').textContent = 'Connessione verificata. IDOMA è collegato.';
-    setConnection(true, 'Server connesso'); await loadConversations();
+    setConnection(true, 'Server connesso'); await loadConversations(); await loadReminders();
     setTimeout(hideSettings, 700);
   } catch (error) {
     $('settingsStatus').textContent = `Verifica non riuscita: ${error.message}`;
@@ -163,6 +217,10 @@ document.querySelectorAll('.suggestion').forEach(button => button.addEventListen
 (async function init() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/static/sw.js').catch(() => {});
   if (!storage.token) { showSettings(); return; }
-  try { await api('/api/health'); await loadConversations(); setConnection(true, 'Server connesso'); }
+  try { await api('/api/health'); await loadConversations(); await loadReminders(); setConnection(true, 'Server connesso'); }
   catch { setConnection(false, 'Configurazione richiesta'); showSettings(); }
 })();
+
+window.setInterval(() => {
+  if (storage.token) loadReminders();
+}, 60000);

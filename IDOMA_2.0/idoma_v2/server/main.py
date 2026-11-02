@@ -15,6 +15,7 @@ from ..config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from ..db import (
     init_db, list_conversations, get_messages, get_legacy_memories, list_memory_facts, conversation_exists,
     agent_heartbeat, claim_agent_task, finish_agent_task, get_agent_task,
+    create_reminder, list_reminders, complete_reminder, snooze_reminder, delete_reminder,
 )
 from ..security import get_api_token
 from ..services.assistant import process_message, new_conversation, tool_catalog
@@ -27,7 +28,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -49,6 +50,15 @@ def require_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10000)
     conversation_id: str | None = None
+
+
+class ReminderRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    due_at: str = Field(min_length=10, max_length=64)
+
+
+class ReminderSnooze(BaseModel):
+    minutes: int = Field(default=10, ge=1, le=10080)
 
 
 class AgentHeartbeat(BaseModel):
@@ -95,6 +105,41 @@ def chat(request: ChatRequest) -> dict:
 @app.get("/api/memory", dependencies=[Depends(require_token)])
 def memory() -> list[dict]:
     return get_legacy_memories(100) + list_memory_facts(100)
+
+
+@app.get("/api/reminders", dependencies=[Depends(require_token)])
+def reminders() -> list[dict]:
+    return list_reminders(False, 100)
+
+
+@app.post("/api/reminders", dependencies=[Depends(require_token)])
+def add_reminder(request: ReminderRequest) -> dict:
+    try:
+        return create_reminder(request.title, request.due_at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/reminders/{reminder_id}/complete", dependencies=[Depends(require_token)])
+def finish_reminder(reminder_id: int) -> dict:
+    if not complete_reminder(reminder_id):
+        raise HTTPException(status_code=404, detail="Promemoria non trovato o già completato.")
+    return {"status": "completed", "id": reminder_id}
+
+
+@app.post("/api/reminders/{reminder_id}/snooze", dependencies=[Depends(require_token)])
+def postpone_reminder(reminder_id: int, request: ReminderSnooze) -> dict:
+    item = snooze_reminder(reminder_id, request.minutes)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Promemoria non trovato.")
+    return item
+
+
+@app.delete("/api/reminders/{reminder_id}", dependencies=[Depends(require_token)])
+def remove_reminder(reminder_id: int) -> dict:
+    if not delete_reminder(reminder_id):
+        raise HTTPException(status_code=404, detail="Promemoria non trovato.")
+    return {"status": "deleted", "id": reminder_id}
 
 
 @app.get("/api/tools", dependencies=[Depends(require_token)])

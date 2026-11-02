@@ -188,10 +188,20 @@ Test automatici della release: 44 test superati.
 - La coda collega ogni attività al messaggio che l'ha generata e gestisce anche il caso in cui l'agente termini prima che il collegamento sia stato registrato.
 
 
-## App desktop Windows (IDOMA 2.3.6)
+## App desktop Windows (IDOMA 2.4.0)
 
 Esegui `Avvia IDOMA.bat` dalla cartella `IDOMA_2.0`. Il programma avvia il server locale e l'agente Windows, resta nell'area di notifica e offre **Apri IDOMA**, **Copia token API**, **Ascolto vocale attivo**, **Avvia con Windows** ed **Esci da IDOMA**.
 
 L'ascolto vocale usa Vosk per la wake phrase **“Hey IDOMA”**, Faster-Whisper per trascrivere il comando in italiano e pyttsx3 per la risposta. I modelli sono eseguiti in locale; il modello Vosk già presente deve rimanere in `PersonalAI\vosk-model-small-it-0.22`. Faster-Whisper usa il modello `base` per impostazione predefinita e può scaricarlo al primo avvio se non è già nella cache locale. Il menu dell'icona consente di disattivare il microfono. Puoi dire **“Hey IDOMA, apri Spotify”** in un'unica frase: il servizio conserva l'audio della wake phrase e passa a Whisper anche il comando che segue; se pronunci soltanto la wake phrase, IDOMA ti chiede cosa fare.
 
 Il server ascolta su `127.0.0.1` per impostazione predefinita. Non esporre la porta HTTP direttamente su Internet. Per l'accesso da iPhone usa una VPN o un tunnel cifrato; l'accesso remoto richiede il PC acceso.
+
+
+## Promemoria locali
+
+- Puoi creare un promemoria con frasi come `Ricordami di chiamare mamma domani alle 10:30`, `Ricordami di pagare la bolletta tra 20 minuti` oppure `Ricordami di inviare il documento il 03/11 alle 9`.
+- Se manca l'orario, IDOMA chiede un chiarimento invece di inventarlo.
+- `/promemoria` mostra i promemoria attivi; `/completa ID` li completa; `/rimanda ID 10` li rimanda di dieci minuti.
+- Il servizio locale controlla le scadenze e mostra una notifica Windows. I promemoria restano nel database personale e vengono conservati tra un riavvio e l'altro.
+- La sezione **Promemoria** nella barra laterale consente di vedere gli appuntamenti in arrivo e completare quelli terminati.
+- Per ricevere notifiche il PC deve essere acceso e IDOMA deve essere in esecuzione.

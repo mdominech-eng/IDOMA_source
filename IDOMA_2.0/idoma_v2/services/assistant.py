@@ -15,6 +15,7 @@ from .memory import (
     remember_file_alias, aliases_for_search, structured_memory_context,
     remember_personal_fact, personal_name_from_memory, parse_personal_memory_instruction,
 )
+from .reminders import handle_reminder_command
 
 SYSTEM_BASE = """Sei IDOMA, un assistente personale intelligente, affidabile e concreto.
 Rispondi in italiano salvo richiesta diversa. Sii naturale, chiaro e operativo.
@@ -302,6 +303,11 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
     if special is not None:
         save_message(conversation_id, "assistant", special)
         return {"conversation_id": conversation_id, "reply": special, "provider": "local", "model": "memory"}
+
+    reminder_reply = handle_reminder_command(message)
+    if reminder_reply is not None:
+        save_message(conversation_id, "assistant", reminder_reply)
+        return {"conversation_id": conversation_id, "reply": reminder_reply, "provider": "local", "model": "reminders"}
 
     # Recover an explicit name instruction from the current conversation if it was
     # entered before this memory fix, then answer identity questions without an LLM call.

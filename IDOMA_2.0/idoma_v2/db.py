@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import re
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 from .config import DB_PATH
@@ -94,6 +94,17 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 UNIQUE(category, subject, value)
             );
+            CREATE TABLE IF NOT EXISTS idoma2_reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                due_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                notified_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_reminders_due
+                ON idoma2_reminders(status, due_at, notified_at);
             CREATE TABLE IF NOT EXISTS idoma2_document_index (
                 path TEXT PRIMARY KEY,
                 modified_ns INTEGER NOT NULL,
@@ -372,6 +383,100 @@ def get_agent_task(task_id: int) -> dict | None:
             (task_id,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def create_reminder(title: str, due_at: str) -> dict:
+    """Create a local reminder; due_at must be an ISO timestamp with timezone."""
+    title = " ".join(str(title).split()).strip()[:300]
+    if not title:
+        raise ValueError("Il testo del promemoria è obbligatorio.")
+    try:
+        due = datetime.fromisoformat(str(due_at).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("La data del promemoria non è valida.") from exc
+    if due.tzinfo is None:
+        raise ValueError("La data del promemoria deve includere il fuso orario.")
+    due_utc = due.astimezone(timezone.utc).isoformat(timespec="seconds")
+    now = utc_now()
+    with connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO idoma2_reminders(title, due_at, status, created_at, updated_at) "
+            "VALUES (?, ?, 'pending', ?, ?)",
+            (title, due_utc, now, now),
+        )
+        row = conn.execute("SELECT * FROM idoma2_reminders WHERE id=?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def list_reminders(include_completed: bool = False, limit: int = 100) -> list[dict]:
+    with connection() as conn:
+        if include_completed:
+            rows = conn.execute(
+                "SELECT * FROM idoma2_reminders ORDER BY "
+                "CASE status WHEN 'pending' THEN 0 ELSE 1 END, due_at ASC, id DESC LIMIT ?",
+                (max(1, min(int(limit), 500)),),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM idoma2_reminders WHERE status='pending' "
+                "ORDER BY due_at ASC, id DESC LIMIT ?",
+                (max(1, min(int(limit), 500)),),
+            ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_due_reminders(limit: int = 30) -> list[dict]:
+    now = utc_now()
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM idoma2_reminders "
+            "WHERE status='pending' AND notified_at IS NULL AND due_at<=? "
+            "ORDER BY due_at ASC LIMIT ?",
+            (now, max(1, min(int(limit), 100))),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def mark_reminder_notified(reminder_id: int) -> bool:
+    with connection() as conn:
+        cur = conn.execute(
+            "UPDATE idoma2_reminders SET notified_at=?, updated_at=? "
+            "WHERE id=? AND status='pending' AND notified_at IS NULL",
+            (utc_now(), utc_now(), int(reminder_id)),
+        )
+    return cur.rowcount == 1
+
+
+def complete_reminder(reminder_id: int) -> bool:
+    with connection() as conn:
+        cur = conn.execute(
+            "UPDATE idoma2_reminders SET status='completed', updated_at=? "
+            "WHERE id=? AND status='pending'",
+            (utc_now(), int(reminder_id)),
+        )
+    return cur.rowcount == 1
+
+
+def snooze_reminder(reminder_id: int, minutes: int = 10) -> dict | None:
+    minutes = max(1, min(int(minutes), 10080))
+    due = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    due_at = due.isoformat(timespec="seconds")
+    with connection() as conn:
+        cur = conn.execute(
+            "UPDATE idoma2_reminders SET due_at=?, notified_at=NULL, updated_at=? "
+            "WHERE id=? AND status='pending'",
+            (due_at, utc_now(), int(reminder_id)),
+        )
+        if cur.rowcount != 1:
+            return None
+        row = conn.execute("SELECT * FROM idoma2_reminders WHERE id=?", (int(reminder_id),)).fetchone()
+    return dict(row)
+
+
+def delete_reminder(reminder_id: int) -> bool:
+    with connection() as conn:
+        cur = conn.execute("DELETE FROM idoma2_reminders WHERE id=?", (int(reminder_id),))
+    return cur.rowcount == 1
 
 
 def save_memory_fact(category: str, subject: str, value: str, aliases: list[str] | None = None, source: str = "utente") -> None:

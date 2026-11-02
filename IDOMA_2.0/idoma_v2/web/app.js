@@ -40,6 +40,7 @@ function addMessage(role, content) {
   if (role === 'user') row.classList.add('user');
   $('messages').appendChild(row);
   $('chatArea').scrollTop = $('chatArea').scrollHeight;
+  return body;
 }
 function clearMessages() { $('messages').replaceChildren(); $('welcome').classList.remove('hidden'); }
 function setBusy(busy) {
@@ -76,20 +77,55 @@ async function sendMessage(text = null) {
   if (state.busy) return;
   const message = (text ?? $('messageInput').value).trim();
   if (!message) return;
+  const requestConversationId = state.conversationId;
   $('messageInput').value = ''; $('messageInput').style.height = 'auto';
   addMessage('user', message); setBusy(true);
   const typing = document.createElement('div'); typing.className = 'typing'; typing.textContent = 'IDOMA sta elaborando…'; $('messages').appendChild(typing);
   try {
-    const result = await api('/api/chat', { method: 'POST', body: JSON.stringify({ message, conversation_id: state.conversationId }) });
+    const result = await api('/api/chat', { method: 'POST', body: JSON.stringify({ message, conversation_id: requestConversationId }) });
+    typing.remove();
+    // Do not inject a late reply into a different conversation opened while the request was running.
+    if (state.conversationId !== requestConversationId) return;
     state.conversationId = result.conversation_id;
-    typing.remove(); addMessage('assistant', result.reply);
+    const assistantBody = addMessage('assistant', result.reply);
+    if (result.pending && result.task_id) pollAgentTask(result.task_id, assistantBody);
     setConnection(true, `Connesso · ${result.provider === 'unavailable' ? 'AI non disponibile' : result.provider}`);
     await loadConversations();
   } catch (error) {
-    typing.remove(); addMessage('assistant', `Non riesco a completare la richiesta: ${error.message}\n\nApri Impostazioni e verifica indirizzo server e token.`);
+    typing.remove();
+    if (state.conversationId === requestConversationId) {
+      addMessage('assistant', `Non riesco a completare la richiesta: ${error.message}\\n\\nApri Impostazioni e verifica indirizzo server e token.`);
+    }
     setConnection(false, 'Errore di connessione');
   } finally { setBusy(false); $('messageInput').focus(); }
 }
+
+async function pollAgentTask(taskId, messageBody, attempt = 0) {
+  if (!messageBody || !messageBody.isConnected) return;
+  if (attempt >= 180) {
+    messageBody.textContent = `L'attività #${taskId} è ancora in corso. Puoi continuare a usare IDOMA; il risultato sarà salvato nella conversazione.`;
+    return;
+  }
+  try {
+    const task = await api(`/api/agent/tasks/${encodeURIComponent(taskId)}`);
+    if (task.status === 'done') {
+      messageBody.textContent = `Fatto: ${task.result || 'operazione completata.'}`;
+      return;
+    }
+    if (task.status === 'failed') {
+      messageBody.textContent = `Non sono riuscito a completare l'attività: ${task.result || 'errore non specificato.'}`;
+      return;
+    }
+    messageBody.textContent = `IDOMA sta lavorando sul PC… (attività #${taskId})`;
+  } catch (error) {
+    if (attempt >= 5) {
+      messageBody.textContent = `Non riesco a verificare lo stato dell'attività #${taskId}. Il PC potrebbe comunque completarla; riapri la conversazione per controllare il risultato.`;
+      return;
+    }
+  }
+  window.setTimeout(() => pollAgentTask(taskId, messageBody, attempt + 1), 1000);
+}
+
 async function verifyConnection() {
   $('settingsStatus').textContent = 'Verifica in corso…';
   localStorage.setItem('idoma_api_url', cleanUrl($('apiUrl').value) || location.origin);

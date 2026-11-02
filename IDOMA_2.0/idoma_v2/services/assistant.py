@@ -3,12 +3,11 @@ from __future__ import annotations
 import uuid
 import re
 import json
-import time
 from ..db import (
     create_conversation, conversation_exists, get_messages, save_message,
     update_conversation, search_legacy_memories, get_legacy_memories,
     add_legacy_memory, forget_legacy_memory, agent_is_online, queue_agent_task, get_agent_task,
-    list_memory_facts, forget_memory_facts,
+    list_memory_facts, forget_memory_facts, link_agent_task_message,
 )
 from ..providers.router import ask_ai, ProviderUnavailable
 from .tool_planner import detect_additional_tool, tool_catalog, is_negated_action
@@ -322,32 +321,26 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
             payload["aliases"] = aliases_for_search(payload.get("query", ""))
         if agent_is_online():
             task_id = queue_agent_task(action, payload)
-            target = payload.get("target", "")
-            # Wait briefly for the desktop agent and report the actual result,
-            # rather than claiming success as soon as a task is merely queued.
-            deadline = time.monotonic() + (38.0 if action == "search_document_content" else 14.0)
-            task_result = None
-            while time.monotonic() < deadline:
-                task_result = get_agent_task(task_id)
-                if task_result and task_result.get("status") in {"done", "failed"}:
-                    break
-                time.sleep(0.35)
-            if task_result and task_result.get("status") == "done":
-                reply = f"Fatto: {task_result.get('result') or ('ho aperto ' + target + '.') }"
-            elif task_result and task_result.get("status") == "failed":
-                reply = f"Ho ricevuto la richiesta, ma Windows non è riuscito a completarla: {task_result.get('result') or 'errore non specificato'}."
-            else:
-                status = task_result.get("status", "queued") if task_result else "queued"
-                wait_seconds = 38 if action == "search_document_content" else 14
-                reply = (f"La richiesta per {target or 'la ricerca documentale'} è ancora {status} dopo {wait_seconds} secondi. "
-                         "Non la considero completata: controlla la finestra CMD di run_desktop_agent.bat. "
-                         f"ID attività: {task_id}.")
-        else:
-            reply = ("Il tuo PC non risulta collegato a IDOMA in questo momento. "
-                     "Accendi il Lenovo e avvia l'agente desktop con run_desktop_agent.bat, "
-                     "poi ripeti il comando.")
+            target = payload.get("target") or payload.get("query") or payload.get("folder") or "richiesta sul PC"
+            reply = (
+                f"Ho avviato '{target}' sul PC. Ti aggiornerò qui appena l'operazione sarà completata. "
+                f"Attività #{task_id}."
+            )
+            message_id = save_message(conversation_id, "assistant", reply)
+            link_agent_task_message(task_id, message_id)
+            return {
+                "conversation_id": conversation_id,
+                "reply": reply,
+                "provider": "desktop_agent",
+                "model": "allowlist",
+                "task_id": task_id,
+                "pending": True,
+            }
+        reply = ("Il tuo PC non risulta collegato a IDOMA in questo momento. "
+                 "Accendi il Lenovo e avvia l'agente desktop con run_desktop_agent.bat, "
+                 "poi ripeti il comando.")
         save_message(conversation_id, "assistant", reply)
-        return {"conversation_id": conversation_id, "reply": reply, "provider": "desktop_agent", "model": "allowlist"}
+        return {"conversation_id": conversation_id, "reply": reply, "provider": "desktop_agent", "model": "allowlist", "pending": False}
 
     memories = search_legacy_memories(message, 12)
     structured = structured_memory_context(message, 10)

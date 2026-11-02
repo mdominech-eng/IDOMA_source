@@ -67,6 +67,12 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_idoma2_agent_tasks_status
                 ON idoma2_agent_tasks(status, id);
+            CREATE TABLE IF NOT EXISTS idoma2_agent_task_messages (
+                task_id INTEGER PRIMARY KEY,
+                message_id INTEGER NOT NULL,
+                FOREIGN KEY(task_id) REFERENCES idoma2_agent_tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY(message_id) REFERENCES idoma2_messages(id) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS idoma2_memory_facts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 category TEXT NOT NULL,
@@ -124,9 +130,9 @@ def update_conversation(conversation_id: str, title: str | None = None) -> None:
             )
 
 
-def save_message(conversation_id: str, role: str, content: str) -> None:
+def save_message(conversation_id: str, role: str, content: str) -> int:
     with connection() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO idoma2_messages(conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
             (conversation_id, role, content, utc_now()),
         )
@@ -134,6 +140,7 @@ def save_message(conversation_id: str, role: str, content: str) -> None:
             "UPDATE idoma2_conversations SET updated_at = ? WHERE id = ?",
             (utc_now(), conversation_id),
         )
+        return int(cur.lastrowid)
 
 
 def list_conversations(limit: int = 50) -> list[dict]:
@@ -315,10 +322,34 @@ def claim_agent_task() -> dict | None:
         return {"id": row[0], "action": row[1], "payload": json.loads(row[2] or "{}")}
 
 
-def finish_agent_task(task_id: int, result: str, success: bool) -> None:
+def link_agent_task_message(task_id: int, message_id: int) -> None:
+    """Associate the pending chat bubble with its desktop task for durable updates."""
     with connection() as conn:
-        conn.execute("UPDATE idoma2_agent_tasks SET status=?, result=?, updated_at=? WHERE id=?",
-                     ("done" if success else "failed", result[:12000], utc_now(), task_id))
+        conn.execute(
+            "INSERT OR REPLACE INTO idoma2_agent_task_messages(task_id, message_id) VALUES (?, ?)",
+            (task_id, message_id),
+        )
+
+
+def finish_agent_task(task_id: int, result: str, success: bool) -> None:
+    clean_result = result[:12000]
+    status = "done" if success else "failed"
+    final_message = f"Fatto: {clean_result}" if success else f"Non sono riuscito a completare l'attività: {clean_result}"
+    with connection() as conn:
+        cur = conn.execute(
+            "UPDATE idoma2_agent_tasks SET status=?, result=?, updated_at=? WHERE id=?",
+            (status, clean_result, utc_now(), task_id),
+        )
+        if cur.rowcount:
+            row = conn.execute(
+                "SELECT message_id FROM idoma2_agent_task_messages WHERE task_id=?",
+                (task_id,),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE idoma2_messages SET content=? WHERE id=?",
+                    (final_message, row[0]),
+                )
 
 
 def get_agent_task(task_id: int) -> dict | None:

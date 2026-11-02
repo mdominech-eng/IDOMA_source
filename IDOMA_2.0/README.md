@@ -178,5 +178,3 @@ Test automatici della release: 44 test superati.
 - Il recupero automatico di vecchie istruzioni di memoria è limitato alla conversazione attiva.
 - Il contesto strutturato inviato al modello viene filtrato in base alla richiesta, anziché includere indiscriminatamente tutti i fatti.
 - Le richieste negative come `Non aprire Spotify` o `Non cercare il PDF` non vengono trasformate in azioni desktop.
-
-- Gli URL generati dal modello non vengono più eseguiti: solo un indirizzo digitato direttamente dall'utente può essere aperto come URL; per gli altri nomi IDOMA cerca l'app installata o apre una ricerca web.

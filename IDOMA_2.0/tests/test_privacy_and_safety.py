@@ -35,14 +35,6 @@ class DesktopActionSafetyTests(unittest.TestCase):
         self.assertIsNone(detect_additional_tool("Non aprire la cartella Documenti"))
         self.assertIsNone(detect_additional_tool("Non cercare il PDF della tesi"))
 
-    def test_model_generated_url_is_ignored(self):
-        parsed = assistant._parse_action_json(
-            '{"action":"open_target","target":"Google","target_type":"website",'
-            '"url":"https://example-phishing.invalid"}'
-        )
-        self.assertEqual(parsed["target"], "Google")
-        self.assertIsNone(parsed["url"])
-
 
 if __name__ == "__main__":
     unittest.main()

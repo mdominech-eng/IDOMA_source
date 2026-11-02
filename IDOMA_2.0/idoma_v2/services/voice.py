@@ -60,10 +60,12 @@ class VoiceAssistant:
         status_callback: Callable[[str], None],
         command_callback: Callable[[str], str],
         stop_event: threading.Event,
+        manual_trigger: threading.Event | None = None,
     ):
         self.status_callback = status_callback
         self.command_callback = command_callback
         self.stop_event = stop_event
+        self.manual_trigger = manual_trigger or threading.Event()
         self._sd = None
         self._np = None
         self._wake_model = None
@@ -156,6 +158,9 @@ class VoiceAssistant:
             channels=1,
         ) as stream:
             while not self.stop_event.is_set():
+                if self.manual_trigger.is_set():
+                    self.manual_trigger.clear()
+                    return None, "__manual__"
                 data, _overflow = stream.read(AUDIO_BLOCK)
                 audio = bytes(data)
                 history.append(audio)
@@ -232,10 +237,20 @@ class VoiceAssistant:
                 if self.stop_event.is_set():
                     break
                 consecutive_audio_errors = 0
-                self._status("IDOMA attivata.")
-                wake_audio, _wake_text = wake_result
-                self._status("Riconosco il comando…")
-                command = strip_wake_prefix(self._transcribe(wake_audio))
+                wake_audio, wake_text = wake_result
+                if wake_text == "__manual__":
+                    self._status("Microfono attivato dal pulsante. Ti ascolto…")
+                    audio = self._capture_command()
+                    if audio is None:
+                        if not self.stop_event.is_set():
+                            self._status("Non ho rilevato voce. Premi il microfono e riprova.")
+                        continue
+                    self._status("Trascrivo il comando…")
+                    command = self._transcribe(audio)
+                else:
+                    self._status("IDOMA attivata.")
+                    self._status("Riconosco il comando…")
+                    command = strip_wake_prefix(self._transcribe(wake_audio))
                 if not command:
                     self._speak("Dimmi, ti ascolto.")
                     audio = self._capture_command()

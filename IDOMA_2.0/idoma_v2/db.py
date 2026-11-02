@@ -94,6 +94,12 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 UNIQUE(category, subject, value)
             );
+            CREATE TABLE IF NOT EXISTS idoma2_briefing_log (
+                local_date TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                sent_at TEXT NOT NULL,
+                PRIMARY KEY(local_date, kind)
+            );
             CREATE TABLE IF NOT EXISTS idoma2_reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -390,6 +396,18 @@ def get_agent_task(task_id: int) -> dict | None:
             (task_id,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def claim_briefing(kind: str, local_date: str) -> bool:
+    """Atomically claim one daily briefing so restarts do not duplicate it."""
+    if kind not in {"morning", "evening"}:
+        raise ValueError("Tipo di briefing non valido.")
+    with connection() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO idoma2_briefing_log(local_date, kind, sent_at) VALUES (?, ?, ?)",
+            (local_date, kind, utc_now()),
+        )
+    return cur.rowcount == 1
 
 
 def create_reminder(title: str, due_at: str) -> dict:

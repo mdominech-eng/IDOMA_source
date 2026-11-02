@@ -188,7 +188,7 @@ Test automatici della release: 44 test superati.
 - La coda collega ogni attività al messaggio che l'ha generata e gestisce anche il caso in cui l'agente termini prima che il collegamento sia stato registrato.
 
 
-## App desktop Windows (IDOMA 2.4.2)
+## App desktop Windows (IDOMA 2.5.0)
 
 Esegui `Avvia IDOMA.bat` dalla cartella `IDOMA_2.0`. Il programma avvia il server locale e l'agente Windows, resta nell'area di notifica e offre **Apri IDOMA**, **Copia token API**, **Ascolto vocale attivo**, **Avvia con Windows** ed **Esci da IDOMA**.
 

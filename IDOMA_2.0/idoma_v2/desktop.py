@@ -8,12 +8,13 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
+from datetime import timedelta
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
-from .config import PACKAGE_DIR
+from .config import PACKAGE_DIR, MORNING_BRIEFING_TIME, EVENING_BRIEFING_TIME
 from .security import get_api_token
 from .server.main import app as api_app
 
@@ -70,6 +71,7 @@ class AgentThread(QThread):
 
 class ReminderThread(QThread):
     reminder_due = Signal(dict)
+    briefing_due = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -78,13 +80,44 @@ class ReminderThread(QThread):
     def stop(self):
         self.stop_event.set()
 
+    @staticmethod
+    def _within_briefing_window(now, configured: str) -> bool:
+        try:
+            hour_text, minute_text = configured.split(":", 1)
+            hour, minute = int(hour_text), int(minute_text)
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return False
+            scheduled = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            elapsed = now - scheduled
+            return timedelta(0) <= elapsed <= timedelta(hours=4)
+        except (TypeError, ValueError):
+            return False
+
     def run(self):
-        from .db import get_due_reminders, mark_reminder_notified
+        from datetime import datetime
+        from .db import get_due_reminders, mark_reminder_notified, claim_briefing
+        from .services.reminders import build_daily_briefing, build_evening_briefing
+
         while not self.stop_event.is_set():
             try:
                 for item in get_due_reminders():
                     if mark_reminder_notified(item["id"]):
                         self.reminder_due.emit(item)
+
+                now = datetime.now().astimezone()
+                local_date = now.date().isoformat()
+                if self._within_briefing_window(now, MORNING_BRIEFING_TIME):
+                    if claim_briefing("morning", local_date):
+                        self.briefing_due.emit({
+                            "kind": "morning",
+                            "message": build_daily_briefing(now),
+                        })
+                if self._within_briefing_window(now, EVENING_BRIEFING_TIME):
+                    if claim_briefing("evening", local_date):
+                        self.briefing_due.emit({
+                            "kind": "evening",
+                            "message": build_evening_briefing(now),
+                        })
             except Exception:
                 # A temporary database lock must not terminate the reminder service.
                 pass
@@ -186,6 +219,7 @@ class IdomaTrayController(QObject):
         self.server_thread.failed.connect(self.on_server_error)
         self.agent_thread.status.connect(self.on_agent_status)
         self.reminder_thread.reminder_due.connect(self.on_reminder_due)
+        self.reminder_thread.briefing_due.connect(self.on_briefing_due)
         self.server_thread.start()
 
         self.startup_timer = QTimer(self)
@@ -284,6 +318,19 @@ class IdomaTrayController(QObject):
             )
         elif "ascolto vocale disattivato" in lowered:
             self.tray.setToolTip("IDOMA · assistente personale")
+
+    def on_briefing_due(self, briefing: dict):
+        kind = briefing.get("kind")
+        heading = "Buongiorno" if kind == "morning" else "Riepilogo serale"
+        message = str(briefing.get("message") or "Non ci sono aggiornamenti.")
+        if len(message) > 240:
+            message = message[:230].rsplit(" ", 1)[0] + "… Apri IDOMA per il riepilogo completo."
+        self.tray.showMessage(
+            f"IDOMA · {heading}",
+            message,
+            QSystemTrayIcon.MessageIcon.Information,
+            15000,
+        )
 
     def on_reminder_due(self, reminder: dict):
         title = str(reminder.get("title") or "Promemoria")

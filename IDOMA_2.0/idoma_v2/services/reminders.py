@@ -196,6 +196,38 @@ def build_daily_briefing(now: datetime | None = None) -> str:
     return "Ecco il tuo riepilogo:\\n" + "\\n\\n".join(sections)
 
 
+def build_evening_briefing(now: datetime | None = None) -> str:
+    from ..db import list_reminders
+
+    current = now or datetime.now().astimezone()
+    if current.tzinfo is None:
+        current = current.astimezone()
+    tomorrow = current.date() + timedelta(days=1)
+    items = list_reminders(False, 200)
+    due_tomorrow = []
+    overdue = []
+    for item in items:
+        due = datetime.fromisoformat(item["due_at"].replace("Z", "+00:00")).astimezone(current.tzinfo)
+        if due.date() < current.date():
+            overdue.append((item, due))
+        elif due.date() == tomorrow:
+            due_tomorrow.append((item, due))
+    sections = []
+    if overdue:
+        sections.append("Da recuperare:\\n" + "\\n".join(
+            f"- #{item['id']} {item['title']} (scaduto il {due.strftime('%d/%m alle %H:%M')})"
+            for item, due in overdue
+        ))
+    if due_tomorrow:
+        sections.append("Domani:\\n" + "\\n".join(
+            f"- #{item['id']} {item['title']} alle {due.strftime('%H:%M')}"
+            for item, due in due_tomorrow
+        ))
+    if not sections:
+        return "Per domani non risultano promemoria. Il calendario esterno non è ancora collegato a IDOMA."
+    return "Ecco cosa ti aspetta:\\n" + "\\n\\n".join(sections)
+
+
 def handle_reminder_command(message: str) -> str | None:
     from ..db import (
         create_reminder, list_reminders, complete_reminder, snooze_reminder,

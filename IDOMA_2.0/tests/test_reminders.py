@@ -61,6 +61,12 @@ class ReminderStorageTests(unittest.TestCase):
         self.db_patch.stop()
         self.tmp.cleanup()
 
+    def test_morning_and_evening_briefings_are_claimed_once_per_day(self):
+        self.assertTrue(db.claim_briefing("morning", "2026-11-02"))
+        self.assertFalse(db.claim_briefing("morning", "2026-11-02"))
+        self.assertTrue(db.claim_briefing("evening", "2026-11-02"))
+        self.assertTrue(db.claim_briefing("morning", "2026-11-03"))
+
     def test_reminder_is_listed_and_notified_once(self):
         due = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(timespec="seconds")
         item = db.create_reminder("Test promemoria", due)

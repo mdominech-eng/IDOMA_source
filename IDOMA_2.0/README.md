@@ -210,3 +210,6 @@ Il server ascolta su `127.0.0.1` per impostazione predefinita. Non esporre la po
 ### Affidabilità della coda desktop
 
 Le attività Windows rimaste nello stato `running` per oltre cinque minuti vengono rimesse automaticamente in coda. Questo consente di recuperare richieste interrotte da un arresto o da un riavvio imprevisto del PC.
+
+
+Puoi chiedere **«Organizza la giornata»**, **«Cosa devo fare oggi?»** oppure usare `/oggi` per ottenere un riepilogo dei promemoria scaduti, di quelli previsti oggi e dei prossimi in programma. Il riepilogo non inventa eventi: segnala chiaramente che un calendario esterno non è ancora collegato.

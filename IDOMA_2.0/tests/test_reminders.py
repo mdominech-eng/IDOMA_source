@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import idoma_v2.db as db
-from idoma_v2.services.reminders import parse_reminder_request, handle_reminder_command
+from idoma_v2.services.reminders import parse_reminder_request, handle_reminder_command, build_daily_briefing
 
 
 class ReminderParsingTests(unittest.TestCase):
@@ -73,6 +73,16 @@ class ReminderStorageTests(unittest.TestCase):
         self.assertIsNotNone(updated)
         self.assertGreater(datetime.fromisoformat(updated["due_at"]), datetime.now(timezone.utc))
         self.assertIsNone(updated["notified_at"])
+
+    def test_daily_briefing_groups_overdue_today_and_upcoming(self):
+        now = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+        db.create_reminder("Scadenza passata", (now - timedelta(days=1)).isoformat())
+        db.create_reminder("Chiamare mamma", (now + timedelta(hours=2)).isoformat())
+        db.create_reminder("Riunione", (now + timedelta(days=1)).isoformat())
+        result = build_daily_briefing(now)
+        self.assertIn("Scadenza passata", result)
+        self.assertIn("Chiamare mamma", result)
+        self.assertIn("Riunione", result)
 
     def test_chat_command_creates_and_lists_reminders(self):
         result = handle_reminder_command("Ricordami di chiamare mamma domani alle 10")

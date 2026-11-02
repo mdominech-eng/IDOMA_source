@@ -156,6 +156,46 @@ def format_reminder_due(due_at: str) -> str:
     return due.strftime("%d/%m/%Y alle %H:%M")
 
 
+def build_daily_briefing(now: datetime | None = None) -> str:
+    from ..db import list_reminders
+
+    current = now or datetime.now().astimezone()
+    if current.tzinfo is None:
+        current = current.astimezone()
+    today = current.date()
+    overdue = []
+    due_today = []
+    upcoming = []
+    for item in list_reminders(False, 200):
+        due = datetime.fromisoformat(item["due_at"].replace("Z", "+00:00")).astimezone(current.tzinfo)
+        if due.date() < today:
+            overdue.append((item, due))
+        elif due.date() == today:
+            due_today.append((item, due))
+        elif len(upcoming) < 3:
+            upcoming.append((item, due))
+
+    sections = []
+    if overdue:
+        sections.append("Da recuperare:\\n" + "\\n".join(
+            f"- #{item['id']} {item['title']} (scaduto: {due.strftime('%H:%M del %d/%m')})"
+            for item, due in overdue
+        ))
+    if due_today:
+        sections.append("Oggi:\\n" + "\\n".join(
+            f"- #{item['id']} {item['title']} alle {due.strftime('%H:%M')}"
+            for item, due in due_today
+        ))
+    if upcoming:
+        sections.append("In arrivo:\\n" + "\\n".join(
+            f"- #{item['id']} {item['title']} il {due.strftime('%d/%m alle %H:%M')}"
+            for item, due in upcoming
+        ))
+    if not sections:
+        return "Per oggi non risultano promemoria. Il calendario esterno non è ancora collegato a IDOMA."
+    return "Ecco il tuo riepilogo:\\n" + "\\n\\n".join(sections)
+
+
 def handle_reminder_command(message: str) -> str | None:
     from ..db import (
         create_reminder, list_reminders, complete_reminder, snooze_reminder,
@@ -183,6 +223,14 @@ def handle_reminder_command(message: str) -> str | None:
             if item
             else f"Non trovo un promemoria attivo con ID #{reminder_id}."
         )
+
+    briefing = bool(re.search(
+        r"^/oggi(?:\s|$)|\b(?:organizza|riepiloga|riassumi)\s+(?:la\s+)?giornata\b|"
+        r"\bcosa\s+(?:ho|devo fare)\s+oggi\b|\bbriefing\b",
+        folded,
+    ))
+    if briefing:
+        return build_daily_briefing()
 
     show = bool(re.search(
         r"^/promemoria(?:\s|$)|\b(?:mostra|mostrami|elenca|vedi)\b.*\bpromemoria\b|"

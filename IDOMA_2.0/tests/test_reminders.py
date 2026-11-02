@@ -32,6 +32,16 @@ class ReminderParsingTests(unittest.TestCase):
         self.assertEqual(title, "chiamare il medico")
         self.assertEqual(due, "2026-11-03T09:00:00+00:00")
 
+    def test_courtesy_prefix_is_supported(self):
+        title, due = parse_reminder_request("Per favore, ricordami di chiamare mamma domani alle 10:30", self.now)
+        self.assertEqual(title, "chiamare mamma")
+        self.assertEqual(due, "2026-11-03T09:30:00+00:00")
+
+    def test_mi_ricordi_form_is_supported(self):
+        title, due = parse_reminder_request("Mi ricordi di inviare il file domani alle 9", self.now)
+        self.assertEqual(title, "inviare il file")
+        self.assertEqual(due, "2026-11-03T08:00:00+00:00")
+
     def test_missing_time_requests_clarification(self):
         self.assertIsNone(parse_reminder_request("Ricordami di comprare il latte", self.now))
 

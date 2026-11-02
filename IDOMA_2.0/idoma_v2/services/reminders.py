@@ -9,7 +9,7 @@ _TIME = r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?"
 
 def is_reminder_intent(message: str) -> bool:
     value = message.casefold()
-    return bool(re.search(r"\bricordami\b|^\s*/promemoria\b", value))
+    return bool(re.search(r"\b(?:ricordami|mi ricordi)\b|^\s*/promemoria\b", value))
 
 
 def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[str, str] | None:
@@ -19,7 +19,7 @@ def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[s
     'ricordami di X tra 20 minuti', and 'ricordami di X il 03/11 alle 9'.
     """
     value = " ".join(message.strip().split())
-    prefix = re.match(r"^(?:idoma[, ]+)?ricordami\s+(?:di\s+)?(.+)$", value, flags=re.IGNORECASE)
+    prefix = re.match(r"^(?:(?:per favore|per piacere|per cortesia)[, ]+)?(?:idoma[, ]+)?(?:ricordami|mi ricordi)\s+(?:di\s+)?(.+)$", value, flags=re.IGNORECASE)
     if not prefix:
         return None
     details = prefix.group(1).strip().rstrip(" .!?")
@@ -225,7 +225,7 @@ def handle_reminder_command(message: str) -> str | None:
         )
 
     briefing = bool(re.search(
-        r"^/oggi(?:\s|$)|\b(?:organizza|riepiloga|riassumi)\s+(?:la\s+)?giornata\b|"
+        r"^/oggi(?:\s|$)|\b(?:organizza|riepiloga|riassumi)\s+(?:la\s+(?:mia\s+)?)?giornata\b|"
         r"\bcosa\s+(?:ho|devo fare)\s+oggi\b|\bbriefing\b",
         folded,
     ))

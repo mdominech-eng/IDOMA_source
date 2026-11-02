@@ -116,9 +116,7 @@ async function loadRuntimeStatus() {
     if (button) {
       button.classList.toggle('active', state.voiceEnabled);
       button.setAttribute('aria-pressed', String(state.voiceEnabled));
-      button.title = state.voiceEnabled
-        ? 'Ascolto locale attivo. Clicca per disattivarlo.'
-        : 'Attiva il microfono locale del PC.';
+      button.title = 'Premi per parlare usando il microfono locale del PC.';
       button.setAttribute('aria-label', button.title);
     }
     if (label) {

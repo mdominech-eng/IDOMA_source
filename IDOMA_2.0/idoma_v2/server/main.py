@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from ..config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from ..db import (
     init_db, list_conversations, get_messages, get_legacy_memories, list_memory_facts, conversation_exists,
-    agent_heartbeat, claim_agent_task, finish_agent_task, get_agent_task,
+    agent_heartbeat, claim_agent_task, finish_agent_task, get_agent_task, agent_is_online,
     create_reminder, list_reminders, complete_reminder, snooze_reminder, delete_reminder,
 )
 from ..security import get_api_token
@@ -72,9 +72,35 @@ class AgentResult(BaseModel):
     success: bool
 
 
+class VoiceToggleRequest(BaseModel):
+    enabled: bool
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "app": APP_NAME, "version": APP_VERSION}
+
+
+@app.get("/api/status", dependencies=[Depends(require_token)])
+def runtime_status() -> dict:
+    controller = getattr(app.state, "idoma_controller", None)
+    voice_enabled = bool(controller and controller.voice_action.isChecked())
+    voice_status = str(getattr(controller, "voice_status", "Servizio vocale desktop non collegato"))
+    return {
+        "version": APP_VERSION,
+        "agent_online": agent_is_online(),
+        "voice_enabled": voice_enabled,
+        "voice_status": voice_status,
+    }
+
+
+@app.post("/api/voice/toggle", dependencies=[Depends(require_token)])
+def toggle_voice(request: VoiceToggleRequest) -> dict:
+    controller = getattr(app.state, "idoma_controller", None)
+    if controller is None:
+        raise HTTPException(status_code=503, detail="Controllo vocale desktop non disponibile.")
+    controller.request_voice_enabled(request.enabled)
+    return {"accepted": True, "enabled": request.enabled}
 
 
 @app.get("/api/conversations", dependencies=[Depends(require_token)])

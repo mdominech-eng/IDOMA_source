@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { conversationId: null, busy: false, conversations: [] };
+const state = { conversationId: null, busy: false, conversations: [], voiceEnabled: false };
 const storage = {
   get url() { return localStorage.getItem('idoma_api_url') || location.origin; },
   get token() { return localStorage.getItem('idoma_api_token') || ''; }
@@ -107,6 +107,55 @@ async function loadReminders() {
   }
 }
 
+async function loadRuntimeStatus() {
+  try {
+    const status = await api('/api/status');
+    state.voiceEnabled = Boolean(status.voice_enabled);
+    const button = $('voiceButton');
+    const label = $('voiceStatus');
+    if (button) {
+      button.classList.toggle('active', state.voiceEnabled);
+      button.setAttribute('aria-pressed', String(state.voiceEnabled));
+      button.title = state.voiceEnabled
+        ? 'Ascolto locale attivo. Clicca per disattivarlo.'
+        : 'Attiva il microfono locale del PC.';
+      button.setAttribute('aria-label', button.title);
+    }
+    if (label) {
+      label.textContent = status.voice_status || (state.voiceEnabled ? 'Ascolto vocale attivo' : 'Ascolto vocale disattivato');
+      label.classList.toggle('listening', state.voiceEnabled && /ascolto|pronta|ti ascolto/i.test(status.voice_status || ''));
+      label.classList.toggle('error', /errore|non disponibile|problema/i.test(status.voice_status || ''));
+    }
+  } catch (error) {
+    const label = $('voiceStatus');
+    if (label) {
+      label.textContent = 'Servizio vocale desktop non raggiungibile';
+      label.classList.add('error');
+    }
+  }
+}
+
+async function toggleVoice() {
+  const enabled = !state.voiceEnabled;
+  const button = $('voiceButton');
+  if (button) button.disabled = true;
+  try {
+    await api('/api/voice/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+    await loadRuntimeStatus();
+  } catch (error) {
+    const label = $('voiceStatus');
+    if (label) {
+      label.textContent = 'Controllo vocale non riuscito: ' + error.message;
+      label.classList.add('error');
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function loadConversations() {
   const items = await api('/api/conversations');
   state.conversations = items;
@@ -201,7 +250,7 @@ async function verifyConnection() {
   try {
     await api('/api/health'); await api('/api/conversations');
     $('settingsStatus').textContent = 'Connessione verificata. IDOMA è collegato.';
-    setConnection(true, 'Server connesso'); await loadConversations(); await loadReminders();
+    setConnection(true, 'Server connesso'); await loadConversations(); await loadReminders(); await loadRuntimeStatus();
     setTimeout(hideSettings, 700);
   } catch (error) {
     $('settingsStatus').textContent = `Verifica non riuscita: ${error.message}`;
@@ -210,6 +259,7 @@ async function verifyConnection() {
 }
 
 $('sendButton').addEventListener('click', () => sendMessage());
+$('voiceButton').addEventListener('click', toggleVoice);
 $('messageInput').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }
 });
@@ -225,7 +275,7 @@ document.querySelectorAll('.suggestion').forEach(button => button.addEventListen
 (async function init() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/static/sw.js').catch(() => {});
   if (!storage.token) { showSettings(); return; }
-  try { await api('/api/health'); await loadConversations(); await loadReminders(); setConnection(true, 'Server connesso'); }
+  try { await api('/api/health'); await loadConversations(); await loadReminders(); await loadRuntimeStatus(); setConnection(true, 'Server connesso'); }
   catch { setConnection(false, 'Configurazione richiesta'); showSettings(); }
 })();
 
@@ -234,3 +284,8 @@ window.setInterval(() => {
   loadConversations().catch(() => {});
   loadReminders();
 }, 60000);
+
+window.setInterval(() => {
+  if (!storage.token) return;
+  loadRuntimeStatus();
+}, 3000);

@@ -170,6 +170,8 @@ class VoiceThread(QThread):
 
 
 class IdomaTrayController(QObject):
+    voice_toggle_requested = Signal(bool)
+
     def __init__(self, application: QApplication):
         super().__init__()
         self.application = application
@@ -178,8 +180,11 @@ class IdomaTrayController(QObject):
         self.reminder_thread = ReminderThread()
         self.agent_started = False
         self.voice_thread = None
+        self.voice_status = "Avvio del servizio vocale…"
         self.server_ready = False
         self._shutting_down = False
+        api_app.state.idoma_controller = self
+        self.voice_toggle_requested.connect(self.set_voice_enabled)
 
         icon_path = PACKAGE_DIR / "web" / "icon-192.png"
         self.tray = QSystemTrayIcon(QIcon(str(icon_path)), self)
@@ -263,11 +268,20 @@ class IdomaTrayController(QObject):
         else:
             self.tray.setToolTip("IDOMA · assistente personale")
 
+    def request_voice_enabled(self, enabled: bool):
+        """Thread-safe bridge from the local HTTP API to the Qt UI thread."""
+        self.voice_toggle_requested.emit(bool(enabled))
+
     def set_voice_enabled(self, enabled: bool):
+        self.voice_action.blockSignals(True)
+        self.voice_action.setChecked(bool(enabled))
+        self.voice_action.blockSignals(False)
         if enabled:
+            self.voice_status = "Avvio del servizio vocale…"
             if self.server_ready:
                 self.start_voice()
         else:
+            self.voice_status = "Ascolto vocale disattivato."
             self.stop_voice()
 
     def start_voice(self):
@@ -291,6 +305,8 @@ class IdomaTrayController(QObject):
             self.voice_thread = None
 
     def on_voice_finished(self):
+        if not self.voice_action.isChecked() or self._shutting_down:
+            self.voice_status = "Ascolto vocale disattivato."
         if self.voice_action.isChecked() and not self._shutting_down:
             self.voice_action.blockSignals(True)
             self.voice_action.setChecked(False)
@@ -305,6 +321,7 @@ class IdomaTrayController(QObject):
             self.voice_thread = None
 
     def on_voice_status(self, message: str):
+        self.voice_status = str(message)
         lowered = message.casefold()
         if "in ascolto" in lowered or "idoma è pronta" in lowered:
             self.tray.setToolTip("IDOMA · ascolto vocale attivo")

@@ -17,7 +17,18 @@ def _normalise(text: str) -> str:
     return " ".join(text.casefold().replace("’", "'").split()).strip(" \t,.:;!?\"'")
 
 
+def is_negated_action(text: str) -> bool:
+    """Recognise explicit Italian negation before a desktop action."""
+    value = _normalise(text)
+    return bool(re.search(
+        r"\bnon\s+(?:(?:mi|lo|la|li|le)\s+)?(?:apr\w*|avvi\w*|lanci\w*|cerc\w*|trov\w*|mostr\w*|vai\s+su|andare\s+su)\b"
+        r"|\bnon\s+(?:voglio|devo|devi|serve|occorre)\s+(?:che\s+tu\s+)?(?:apra|apri|aprire|avvii|avviare|lanci|lanciare|cerchi|cercare|trovi|trovare)\b",
+        value,
+    ))
+
+
 def _folder_from_text(text: str) -> str | None:
+
     value = _normalise(text)
     if not re.search(r"\b(apri|aprimi|aprire|mi apri|puoi aprire|potresti aprire|fammi vedere|mostra|vai|visualizza|raggiungi|portami|entra)\b", value):
         return None
@@ -103,6 +114,8 @@ def _is_pc_status(text: str) -> bool:
 
 
 def detect_additional_tool(message: str) -> tuple[str, dict] | None:
+    if is_negated_action(message):
+        return None
     folder = _folder_from_text(message)
     if folder:
         return "open_folder", {"folder": folder}

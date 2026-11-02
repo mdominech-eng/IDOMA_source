@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 import unicodedata
-from ..db import save_memory_fact, list_memory_facts, find_memory_aliases
+from ..db import save_memory_fact, list_memory_facts, find_memory_aliases, is_memory_suppressed, clear_memory_suppression
 
 
 def _normalise(value: str) -> str:
@@ -63,9 +63,22 @@ def aliases_for_search(query: str) -> list[str]:
     return find_memory_aliases(query)
 
 
-def structured_memory_context(limit: int = 30) -> list[str]:
-    facts = list_memory_facts(limit)
-    return [item["content"] for item in facts]
+def structured_memory_context(query: str = "", limit: int = 10) -> list[str]:
+    """Return only structured facts relevant to the current request."""
+    tokens = set(_normalise(query).split())
+    if not tokens:
+        return []
+    ranked = []
+    for item in list_memory_facts(200):
+        searchable = _normalise(" ".join([
+            str(item.get("subject", "")), str(item.get("value", "")),
+            " ".join(item.get("aliases", [])),
+        ]))
+        score = sum(1 for token in tokens if token in searchable.split())
+        if score:
+            ranked.append((score, item.get("updated_at", ""), item["content"]))
+    ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [content for _, _, content in ranked[:max(1, min(int(limit), 30))]]
 
 
 def parse_personal_memory_instruction(message: str) -> tuple[str, str, list[str]] | None:
@@ -89,11 +102,15 @@ def parse_personal_memory_instruction(message: str) -> tuple[str, str, list[str]
     return None
 
 
-def remember_personal_fact(message: str) -> bool:
+def remember_personal_fact(message: str, *, allow_override: bool = True) -> bool:
     parsed = parse_personal_memory_instruction(message)
     if not parsed:
         return False
     subject, value, aliases = parsed
+    if is_memory_suppressed("personal", subject, value):
+        if not allow_override:
+            return False
+        clear_memory_suppression("personal", subject, value)
     save_memory_fact("personal", subject, value, aliases, source="istruzione_esplicita_utente")
     return True
 
@@ -104,7 +121,7 @@ def personal_name_from_memory(legacy_memories: list[dict] | None = None) -> str 
     for item in facts:
         if item.get("category") == "personal" and item.get("subject", "").casefold() in {"nome", "name"}:
             value = str(item.get("value", "")).strip()
-            if value:
+            if value and not is_memory_suppressed("personal", "nome", value):
                 return value
     memories = legacy_memories or []
     patterns = (
@@ -117,5 +134,6 @@ def personal_name_from_memory(legacy_memories: list[dict] | None = None) -> str 
             match = re.search(pattern, content, flags=re.IGNORECASE)
             if match:
                 name = match.group(1).strip()
-                return name[0].upper() + name[1:] if name else None
+                if name and not is_memory_suppressed("personal", "nome", name):
+                    return name[0].upper() + name[1:]
     return None

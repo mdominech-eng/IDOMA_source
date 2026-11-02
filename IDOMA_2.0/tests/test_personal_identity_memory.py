@@ -63,6 +63,29 @@ class PersonalIdentityMemoryTests(unittest.TestCase):
         db.add_legacy_memory("Mi chiamo Marco", "test")
         self.assertEqual(personal_name_from_memory(db.get_legacy_memories()), "Marco")
 
+    def test_forgotten_name_is_not_resurrected_from_chat_history(self):
+        conversation = assistant.new_conversation()
+        db.save_message(conversation["id"], "user", "Ricorda che mi chiamo Marco")
+        assistant.process_message("/dimentica Marco", conversation["id"])
+        result = assistant.process_message("Come mi chiamo?", conversation["id"])
+        self.assertIn("Non ho ancora memorizzato", result["reply"])
+        self.assertIsNone(personal_name_from_memory(db.get_legacy_memories(100)))
+
+    def test_explicitly_remembering_again_restores_a_forgotten_name(self):
+        conversation = assistant.new_conversation()
+        db.save_message(conversation["id"], "user", "Ricorda che mi chiamo Marco")
+        assistant.process_message("/dimentica Marco", conversation["id"])
+        assistant.process_message("/ricorda mi chiamo Marco", conversation["id"])
+        result = assistant.process_message("Come mi chiamo?", conversation["id"])
+        self.assertEqual(result["reply"], "Ti chiami Marco.")
+
+    def test_structured_memory_context_is_relevant_to_the_question(self):
+        from idoma_v2.services.memory import structured_memory_context
+        db.save_memory_fact("file_alias", "curriculum", "CB", ["CV"])
+        db.save_memory_fact("personal", "nome", "Marco", ["nome"])
+        context = structured_memory_context("Dove si trova il mio curriculum?", 10)
+        self.assertEqual(context, ["curriculum: CB (alias: curriculum, CV)"])
+
 
 if __name__ == "__main__":
     unittest.main()

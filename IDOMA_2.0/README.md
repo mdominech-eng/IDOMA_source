@@ -36,7 +36,7 @@ Per installarla: apri l'indirizzo HTTPS del server in Safari, premi Condividi e 
 
 ## Modelli AI
 
-Il router prova prima Ollama (impostazione predefinita). Se Ollama non è disponibile, prova il provider cloud soltanto se sono configurati `IDOMA_CLOUD_BASE_URL`, `IDOMA_CLOUD_API_KEY` e `IDOMA_CLOUD_MODEL`.
+Il router usa Ollama in locale. **Il cloud è disattivato per impostazione predefinita**, anche se hai inserito le credenziali. Per autorizzare esplicitamente l’invio di richieste e contesto al provider online, imposta `IDOMA_ALLOW_CLOUD=1` nel file `.env`; per mantenere il comportamento locale lascia `IDOMA_ALLOW_CLOUD=0`.
 
 Per il cloud crea un file `.env` copiando `.env.example` e inserisci i valori sul server, mai nel JavaScript della PWA. L'uso di un provider cloud può comportare costi: non è attivato automaticamente.
 
@@ -168,3 +168,13 @@ Esempi: `Trova il documento in cui si parla del progetto iDOMA`, `In quale file 
 - Le modifiche sono additive: non vengono cancellati o sovrascritti i database, le conversazioni o i ricordi esistenti.
 
 Test automatici della release: 44 test superati.
+
+
+## IDOMA 2.3.3 — privacy e memoria affidabile
+
+- Il provider cloud è ora disabilitato per impostazione predefinita. La presenza di una chiave API non autorizza da sola l'invio di dati: serve `IDOMA_ALLOW_CLOUD=1`.
+- Il comando `/dimentica` rimuove anche le voci corrispondenti dalla vecchia tabella `memorie`, quando presente.
+- Le informazioni dimenticate ricevono un blocco di recupero, così la scansione della cronologia non le reinserisce automaticamente. Un nuovo comando esplicito `/ricorda` può salvarle di nuovo.
+- Il recupero automatico di vecchie istruzioni di memoria è limitato alla conversazione attiva.
+- Il contesto strutturato inviato al modello viene filtrato in base alla richiesta, anziché includere indiscriminatamente tutti i fatti.
+- Le richieste negative come `Non aprire Spotify` o `Non cercare il PDF` non vengono trasformate in azioni desktop.

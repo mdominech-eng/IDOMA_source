@@ -29,6 +29,12 @@ class DesktopToolPlannerTests(unittest.TestCase):
     def test_regular_conversation_is_not_tool(self):
         self.assertIsNone(detect_additional_tool("Mi spieghi cos'è una cartella di Windows?"))
 
+    def test_negated_folder_command_is_not_executed(self):
+        self.assertIsNone(detect_additional_tool("Non aprire la cartella Documenti"))
+
+    def test_negated_search_command_is_not_executed(self):
+        self.assertIsNone(detect_additional_tool("Non cercare il PDF della tesi"))
+
     def test_tool_catalog_is_generic(self):
         names = {item["name"] for item in tool_catalog()}
         self.assertTrue({"open_target", "search_files", "open_folder", "open_path", "pc_status"}.issubset(names))

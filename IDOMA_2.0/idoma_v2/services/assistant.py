@@ -8,10 +8,10 @@ from ..db import (
     create_conversation, conversation_exists, get_messages, save_message,
     update_conversation, search_legacy_memories, get_legacy_memories,
     add_legacy_memory, forget_legacy_memory, agent_is_online, queue_agent_task, get_agent_task,
-    list_memory_facts, forget_memory_facts, get_recent_user_messages,
+    list_memory_facts, forget_memory_facts,
 )
 from ..providers.router import ask_ai, ProviderUnavailable
-from .tool_planner import detect_additional_tool, tool_catalog
+from .tool_planner import detect_additional_tool, tool_catalog, is_negated_action
 from .memory import (
     remember_file_alias, aliases_for_search, structured_memory_context,
     remember_personal_fact, personal_name_from_memory, parse_personal_memory_instruction,
@@ -35,17 +35,18 @@ def new_conversation() -> dict:
 
 def _recover_explicit_personal_facts(history: list[dict] | None = None) -> None:
     """Import only explicit remember-name instructions from existing chat history."""
+    # Recover only from the active conversation. Global history scanning could
+    # resurrect a fact after the user explicitly asked IDOMA to forget it.
     candidates = [item.get("content", "") for item in (history or []) if item.get("role") == "user"]
-    candidates.extend(get_recent_user_messages(500))
     seen = set()
     for content in candidates:
         if content and content not in seen:
             seen.add(content)
             if parse_personal_memory_instruction(content):
-                remember_personal_fact(content)
+                remember_personal_fact(content, allow_override=False)
 
 
-def _special_memory_command(message: str) -> str | None:
+def _special_memory_command(message: str, history: list[dict] | None = None) -> str | None:
     command = message.strip()
     folded = command.casefold()
 
@@ -54,7 +55,7 @@ def _special_memory_command(message: str) -> str | None:
         re.search(r"\b(?:cosa|che cosa|quali informazioni)\b.*\b(?:ricordi|ricord[i]?|memoria)\b", folded)
     )
     if show_memory:
-        _recover_explicit_personal_facts()
+        _recover_explicit_personal_facts(history)
         memories = get_legacy_memories(60)
         facts = list_memory_facts(60)
         combined = list(dict.fromkeys([item["content"] for item in memories] + [item["content"] for item in facts]))
@@ -230,7 +231,7 @@ def _parse_action_json(content: str) -> dict | None:
 
 def _detect_desktop_action(message: str) -> tuple[str, dict] | None:
     """Use the AI as a language interpreter, with a generic non-AI fallback."""
-    if not _looks_like_open_request(message):
+    if is_negated_action(message) or not _looks_like_open_request(message):
         return None
 
     prompt = [
@@ -301,7 +302,7 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
         update_conversation(conversation_id, message[:70] or "Nuova conversazione")
 
     save_message(conversation_id, "user", message)
-    special = _special_memory_command(message)
+    special = _special_memory_command(message, history_before)
     if special is not None:
         save_message(conversation_id, "assistant", special)
         return {"conversation_id": conversation_id, "reply": special, "provider": "local", "model": "memory"}
@@ -352,7 +353,7 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
         return {"conversation_id": conversation_id, "reply": reply, "provider": "desktop_agent", "model": "allowlist"}
 
     memories = search_legacy_memories(message, 12)
-    structured = structured_memory_context(30)
+    structured = structured_memory_context(message, 10)
     memory_lines = list(dict.fromkeys(memories + structured))
     memory_context = "\n".join(f"- {item}" for item in memory_lines) if memory_lines else "Nessun ricordo pertinente recuperato."
     system = SYSTEM_BASE + "\n\nMEMORIA PERSONALE DISPONIBILE:\n" + memory_context

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from ..config import (
     OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT,
-    CLOUD_BASE_URL, CLOUD_API_KEY, CLOUD_MODEL, PREFER_LOCAL,
+    CLOUD_BASE_URL, CLOUD_API_KEY, CLOUD_MODEL, PREFER_LOCAL, ALLOW_CLOUD,
 )
 
 
@@ -67,7 +67,11 @@ def _ask_cloud(messages: list[dict]) -> AIResponse:
 
 def ask_ai(messages: list[dict]) -> AIResponse:
     errors = []
-    providers = ([_ask_ollama, _ask_cloud] if PREFER_LOCAL else [_ask_cloud, _ask_ollama])
+    # Cloud is strictly opt-in. With the default configuration, user data stays local.
+    if ALLOW_CLOUD:
+        providers = ([_ask_ollama, _ask_cloud] if PREFER_LOCAL else [_ask_cloud, _ask_ollama])
+    else:
+        providers = [_ask_ollama]
     for provider in providers:
         try:
             return provider(messages)

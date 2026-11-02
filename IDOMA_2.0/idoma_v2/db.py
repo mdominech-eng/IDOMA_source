@@ -80,6 +80,14 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_idoma2_memory_facts_category
                 ON idoma2_memory_facts(category, subject);
+            CREATE TABLE IF NOT EXISTS idoma2_memory_suppressions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(category, subject, value)
+            );
             CREATE TABLE IF NOT EXISTS idoma2_document_index (
                 path TEXT PRIMARY KEY,
                 modified_ns INTEGER NOT NULL,
@@ -228,6 +236,15 @@ def forget_legacy_memory(query: str) -> int:
         if _table_exists(conn, "ricordi"):
             cur = conn.execute("DELETE FROM ricordi WHERE contenuto LIKE ?", (f"%{query}%",))
             deleted += cur.rowcount
+        # The legacy key/value table is also part of the user memory surface.
+        if _table_exists(conn, "memorie"):
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(memorie)").fetchall()}
+            if {"chiave", "valore"}.issubset(cols):
+                cur = conn.execute(
+                    "DELETE FROM memorie WHERE CAST(chiave AS TEXT) LIKE ? OR CAST(valore AS TEXT) LIKE ?",
+                    (f"%{query}%", f"%{query}%"),
+                )
+                deleted += cur.rowcount
     return deleted
 
 
@@ -380,16 +397,47 @@ def find_memory_aliases(query: str, limit: int = 8) -> list[str]:
     return found[:limit]
 
 
+def is_memory_suppressed(category: str, subject: str, value: str) -> bool:
+    """Prevent a forgotten fact from being re-imported from old chat history."""
+    candidate = " ".join(str(value).casefold().split())
+    if not candidate:
+        return False
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT value FROM idoma2_memory_suppressions "
+            "WHERE (category='*' OR category=?) AND (subject='*' OR subject=?)",
+            (category, subject),
+        ).fetchall()
+    for row in rows:
+        blocked = " ".join(str(row[0]).casefold().split())
+        if blocked and (blocked in candidate or candidate in blocked):
+            return True
+    return False
+
+
+def clear_memory_suppression(category: str, subject: str, value: str) -> None:
+    """A new explicit remember instruction may intentionally restore a fact."""
+    candidate = " ".join(str(value).casefold().split())
+    with connection() as conn:
+        conn.execute(
+            "DELETE FROM idoma2_memory_suppressions WHERE "
+            "((category=? AND subject=?) OR (category='*' AND subject='*')) "
+            "AND (lower(value)=? OR lower(value)='nome' OR lower(value)='name')",
+            (category, subject, candidate),
+        )
+
+
 def forget_memory_facts(query: str) -> int:
-    """Delete structured facts matching a user-requested concept or value."""
+    """Delete matching facts and record tombstones so chat-history recovery cannot resurrect them."""
     query = " ".join(query.casefold().split()).strip()
     if not query:
         return 0
     import json
     deleted = 0
     with connection() as conn:
-        rows = conn.execute("SELECT id, subject, value, aliases FROM idoma2_memory_facts").fetchall()
+        rows = conn.execute("SELECT id, category, subject, value, aliases FROM idoma2_memory_facts").fetchall()
         ids = []
+        suppressed = []
         for row in rows:
             try:
                 aliases = json.loads(row["aliases"] or "[]")
@@ -398,10 +446,20 @@ def forget_memory_facts(query: str) -> int:
             fields = [row["subject"], row["value"], *aliases]
             if any(query == str(field).casefold().strip() or query in str(field).casefold() for field in fields):
                 ids.append(row["id"])
+                suppressed.append((row["category"], row["subject"], row["value"], utc_now()))
         if ids:
             placeholders = ",".join("?" for _ in ids)
             cur = conn.execute(f"DELETE FROM idoma2_memory_facts WHERE id IN ({placeholders})", ids)
             deleted = cur.rowcount
+        # Suppress the requested phrase even when the fact existed only in chat history.
+        conn.execute(
+            "INSERT OR IGNORE INTO idoma2_memory_suppressions(category, subject, value, created_at) VALUES (?, ?, ?, ?)",
+            ("*", "*", query, utc_now()),
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO idoma2_memory_suppressions(category, subject, value, created_at) VALUES (?, ?, ?, ?)",
+            suppressed,
+        )
     return deleted
 
 

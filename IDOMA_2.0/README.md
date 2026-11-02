@@ -186,3 +186,12 @@ Test automatici della release: 44 test superati.
 - La chat controlla lo stato dell'attività e aggiorna il messaggio quando l'agente Windows termina.
 - Il risultato finale viene salvato nella conversazione; se l'utente cambia chat e torna in seguito, IDOMA riprende il controllo delle attività ancora in corso.
 - La coda collega ogni attività al messaggio che l'ha generata e gestisce anche il caso in cui l'agente termini prima che il collegamento sia stato registrato.
+
+
+## App desktop Windows (IDOMA 2.3.5)
+
+Esegui `Avvia IDOMA.bat` una volta dalla cartella `IDOMA_2.0`. Il programma avvia server locale e agente desktop, resta nell'area di notifica accanto all'orologio e offre **Apri IDOMA**, **Copia token API**, **Avvia con Windows** ed **Esci da IDOMA**.
+
+Il server ascolta su `127.0.0.1` per impostazione predefinita. Non esporre la porta HTTP direttamente su Internet. Per l'accesso da iPhone usa una VPN o un tunnel cifrato; l'accesso remoto richiede il PC acceso.
+
+Il modulo vocale sarà integrato nel passaggio successivo: questa build desktop non deve essere considerata già dotata di wake word finché non viene verificata la relativa integrazione sul PC.

@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import secrets
 from pathlib import Path
+
 from .config import ENVIRONMENT, RELEASE_DIR
 
 TOKEN_FILE = RELEASE_DIR / ".idoma_token"
 
 
 def get_api_token() -> str:
+    """Return the local API token without ever printing it to stdout or logs."""
     configured = os.getenv("IDOMA_API_TOKEN", "").strip()
     if configured:
         return configured
@@ -22,12 +24,11 @@ def get_api_token() -> str:
         raise RuntimeError("In produzione devi impostare IDOMA_API_TOKEN.")
 
     token = secrets.token_urlsafe(36)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
     TOKEN_FILE.write_text(token, encoding="utf-8")
     try:
         TOKEN_FILE.chmod(0o600)
     except OSError:
+        # Windows ACLs are managed by the current user's profile permissions.
         pass
-    print("\n[IDOMA] Creato il token personale API. Inseriscilo nelle impostazioni dell'app web:")
-    print(token)
-    print(f"[IDOMA] Copia di sicurezza del token: {TOKEN_FILE}\n")
     return token

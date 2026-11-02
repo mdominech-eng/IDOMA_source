@@ -20,7 +20,7 @@ from .config import RELEASE_DIR
 from .security import get_api_token
 from .db import upsert_indexed_documents, list_indexed_documents, list_indexed_document_metadata
 
-SERVER_URL = os.getenv("IDOMA_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+SERVER_URL = os.getenv("IDOMA_SERVER_URL", f"http://127.0.0.1:{os.getenv('IDOMA_PORT', '8000')}").rstrip("/")
 TOKEN = get_api_token()
 DEVICE_ID = os.getenv("IDOMA_DEVICE_ID", platform.node().lower().replace(" ", "-")[:100])
 DEVICE_NAME = os.getenv("IDOMA_DEVICE_NAME", f"PC Windows · {platform.node()}")
@@ -612,30 +612,50 @@ def execute_task(action: str, payload: dict) -> str:
     raise ValueError(f"Azione non autorizzata: {action}")
 
 
-def main() -> None:
+def run_agent(stop_event=None, status_callback=None, quiet: bool = True) -> None:
+    """Run the Windows task worker in-process or as a standalone process."""
     if os.name != "nt":
-        raise SystemExit("L'agente desktop IDOMA è destinato a Windows.")
-    print("IDOMA Desktop Agent avviato.")
-    print(f"Server: {SERVER_URL}")
-    print("Strumenti abilitati: app e siti, ricerca file e contenuti documenti, cartelle utente, apertura percorsi autorizzati e stato PC.")
+        raise RuntimeError("L'agente desktop IDOMA è destinato a Windows.")
+
+    def report(message: str) -> None:
+        if status_callback:
+            try:
+                status_callback(message)
+            except Exception:
+                pass
+        if not quiet:
+            print(message, flush=True)
+
+    report("IDOMA Desktop Agent avviato.")
+    report(f"Server: {SERVER_URL}")
     heartbeat = {"device_id": DEVICE_ID, "device_name": DEVICE_NAME}
-    while True:
+    while stop_event is None or not stop_event.is_set():
         try:
             result = api_post("/api/agent/claim", heartbeat)
             task = result.get("task")
             if task:
                 task_id = int(task["id"])
-                print(f"[RICEVUTA] #{task_id}: {task.get('action')} {task.get('payload') or {}}", flush=True)
+                report(f"Attività #{task_id} ricevuta.")
                 try:
                     message = execute_task(task["action"], task.get("payload") or {})
                     api_post("/api/agent/result", {"task_id": task_id, "result": message, "success": True})
-                    print(f"[OK] #{task_id}: {message}", flush=True)
+                    report(f"Attività #{task_id} completata.")
                 except Exception as exc:
                     api_post("/api/agent/result", {"task_id": task_id, "result": str(exc), "success": False})
-                    print(f"[ERRORE] #{task_id}: {exc}", flush=True)
+                    report(f"Attività #{task_id} non riuscita: {exc}")
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            print(f"Server non raggiungibile: {exc}")
-        time.sleep(POLL_SECONDS)
+            report(f"Server non raggiungibile: {exc}")
+        if stop_event is not None:
+            stop_event.wait(POLL_SECONDS)
+        else:
+            time.sleep(POLL_SECONDS)
+
+
+def main() -> None:
+    try:
+        run_agent(quiet=False)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc))
 
 
 if __name__ == "__main__":

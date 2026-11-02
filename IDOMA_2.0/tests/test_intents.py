@@ -56,6 +56,12 @@ class GenericIntentTests(unittest.TestCase):
             action, payload = _detect_desktop_action("Per favore, apri Spotify sul mio computer")
         self.assertEqual(action, "open_target")
         self.assertEqual(payload["target"], "Spotify")
+    def test_clear_app_open_skips_slow_llm_classification(self):
+        with patch("idoma_v2.services.assistant.ask_ai", side_effect=AssertionError("LLM should not be called")):
+            action, payload = _detect_desktop_action("Apri Spotify")
+        self.assertEqual(action, "open_target")
+        self.assertEqual(payload["target"], "Spotify")
+
 
 if __name__ == "__main__":
     unittest.main()

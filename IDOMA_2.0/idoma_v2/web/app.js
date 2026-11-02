@@ -107,12 +107,51 @@ async function loadReminders() {
   }
 }
 
+async function loadMemory() {
+  const host = $('memoryList');
+  if (!host) return;
+  host.replaceChildren();
+  try {
+    const items = await api('/api/memory');
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'memory-empty';
+      empty.textContent = 'La memoria è ancora vuota. Puoi dire: "Ricorda che..."';
+      host.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'memory-item';
+      row.textContent = item.content || [item.subject, item.value].filter(Boolean).join(': ');
+      host.appendChild(row);
+    }
+  } catch (error) {
+    const empty = document.createElement('div');
+    empty.className = 'memory-empty error';
+    empty.textContent = 'Non riesco a leggere la memoria: ' + error.message;
+    host.appendChild(empty);
+  }
+}
+
+function showMemory() {
+  $('memoryModal').classList.remove('hidden');
+  loadMemory();
+}
+function hideMemory() { $('memoryModal').classList.add('hidden'); }
+
 async function loadRuntimeStatus() {
   try {
     const status = await api('/api/status');
     state.voiceEnabled = Boolean(status.voice_enabled);
     const button = $('voiceButton');
     const label = $('voiceStatus');
+    const agent = $('agentStatus');
+    if (agent) {
+      agent.textContent = status.agent_online ? 'PC pronto per i comandi' : 'Agente PC offline';
+      agent.classList.toggle('listening', Boolean(status.agent_online));
+      agent.classList.toggle('error', !status.agent_online);
+    }
     if (button) {
       button.classList.toggle('active', state.voiceEnabled);
       button.setAttribute('aria-pressed', String(state.voiceEnabled));
@@ -264,6 +303,10 @@ $('messageInput').addEventListener('keydown', (event) => {
 $('messageInput').addEventListener('input', () => { const el = $('messageInput'); el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 180)}px`; });
 $('newChat').addEventListener('click', () => createConversation().catch(showSettings));
 $('openSettings').addEventListener('click', showSettings);
+$('openMemory').addEventListener('click', showMemory);
+$('closeMemory').addEventListener('click', hideMemory);
+$('doneMemory').addEventListener('click', hideMemory);
+$('refreshMemory').addEventListener('click', loadMemory);
 $('closeSettings').addEventListener('click', hideSettings);
 $('cancelSettings').addEventListener('click', hideSettings);
 $('saveSettings').addEventListener('click', verifyConnection);

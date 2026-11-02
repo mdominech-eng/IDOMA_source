@@ -1,0 +1,454 @@
+from __future__ import annotations
+
+import sqlite3
+import re
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator
+from .config import DB_PATH
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+@contextmanager
+def connection() -> Iterator[sqlite3.Connection]:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db() -> None:
+    """Adds IDOMA 2 tables. Existing tables and records are never dropped or rewritten."""
+    with connection() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS idoma2_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL DEFAULT 'Nuova conversazione',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS idoma2_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES idoma2_conversations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_messages_conversation
+                ON idoma2_messages(conversation_id, id);
+            CREATE TABLE IF NOT EXISTS idoma2_agent_devices (
+                device_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                last_seen TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS idoma2_agent_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'queued',
+                result TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_agent_tasks_status
+                ON idoma2_agent_tasks(status, id);
+            CREATE TABLE IF NOT EXISTS idoma2_memory_facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                value TEXT NOT NULL,
+                aliases TEXT NOT NULL DEFAULT '[]',
+                source TEXT NOT NULL DEFAULT 'utente',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(category, subject)
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_memory_facts_category
+                ON idoma2_memory_facts(category, subject);
+            CREATE TABLE IF NOT EXISTS idoma2_document_index (
+                path TEXT PRIMARY KEY,
+                modified_ns INTEGER NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                extension TEXT NOT NULL,
+                content TEXT NOT NULL,
+                indexed_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_document_index_extension
+                ON idoma2_document_index(extension);
+        """)
+
+
+def create_conversation(conversation_id: str, title: str = "Nuova conversazione") -> None:
+    now = utc_now()
+    with connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO idoma2_conversations(id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, title[:80], now, now),
+        )
+
+
+def update_conversation(conversation_id: str, title: str | None = None) -> None:
+    with connection() as conn:
+        if title:
+            conn.execute(
+                "UPDATE idoma2_conversations SET title = ?, updated_at = ? WHERE id = ?",
+                (title[:80], utc_now(), conversation_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE idoma2_conversations SET updated_at = ? WHERE id = ?",
+                (utc_now(), conversation_id),
+            )
+
+
+def save_message(conversation_id: str, role: str, content: str) -> None:
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO idoma2_messages(conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, role, content, utc_now()),
+        )
+        conn.execute(
+            "UPDATE idoma2_conversations SET updated_at = ? WHERE id = ?",
+            (utc_now(), conversation_id),
+        )
+
+
+def list_conversations(limit: int = 50) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT id, title, created_at, updated_at FROM idoma2_conversations ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_messages(conversation_id: str, limit: int = 40) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT role, content, created_at FROM idoma2_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?",
+            (conversation_id, limit),
+        ).fetchall()
+    return [dict(row) for row in reversed(rows)]
+
+
+def get_recent_user_messages(limit: int = 300) -> list[str]:
+    """Read recent user-authored messages across conversations for explicit memory recovery."""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT content FROM idoma2_messages WHERE role='user' ORDER BY id DESC LIMIT ?",
+            (max(1, min(int(limit), 2000)),),
+        ).fetchall()
+    return [str(row[0]) for row in rows if row[0]]
+
+
+def conversation_exists(conversation_id: str) -> bool:
+    with connection() as conn:
+        row = conn.execute("SELECT 1 FROM idoma2_conversations WHERE id = ?", (conversation_id,)).fetchone()
+    return row is not None
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def get_legacy_memories(limit: int = 60) -> list[dict]:
+    """Reads old IDOMA memories in place; it does not migrate or delete them."""
+    items: list[dict] = []
+    with connection() as conn:
+        if _table_exists(conn, "ricordi"):
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(ricordi)").fetchall()}
+            if "contenuto" in cols:
+                order = "id DESC" if "id" in cols else "rowid DESC"
+                rows = conn.execute(f"SELECT contenuto FROM ricordi ORDER BY {order} LIMIT ?", (limit,)).fetchall()
+                items.extend({"type": "ricordo", "content": row[0]} for row in rows if row[0])
+        if _table_exists(conn, "memorie"):
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(memorie)").fetchall()}
+            if {"chiave", "valore"}.issubset(cols):
+                rows = conn.execute("SELECT chiave, valore FROM memorie ORDER BY chiave LIMIT ?", (limit,)).fetchall()
+                items.extend({"type": "dato", "content": f"{row[0]}: {row[1]}"} for row in rows if row[1])
+    return items[:limit]
+
+
+def search_legacy_memories(query: str, limit: int = 12) -> list[str]:
+    words = [w for w in query.lower().split() if len(w) > 3]
+    all_items = get_legacy_memories(100)
+    if not words:
+        return [x["content"] for x in all_items[:limit]]
+    ranked = []
+    for item in all_items:
+        content = item["content"]
+        score = sum(word in content.lower() for word in words)
+        if score:
+            ranked.append((score, content))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    return [content for _, content in ranked[:limit]]
+
+
+def add_legacy_memory(content: str, source: str = "idoma_2") -> bool:
+    content = " ".join(content.split()).strip()
+    if not content:
+        return False
+    with connection() as conn:
+        if not _table_exists(conn, "ricordi"):
+            conn.execute("""CREATE TABLE ricordi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contenuto TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                fonte TEXT NOT NULL DEFAULT 'utente',
+                creato_il TEXT DEFAULT CURRENT_TIMESTAMP,
+                aggiornato_il TEXT DEFAULT CURRENT_TIMESTAMP
+            )""")
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO ricordi(contenuto, fonte) VALUES (?, ?)",
+            (content[:1000], source),
+        )
+    return cur.rowcount > 0
+
+
+def forget_legacy_memory(query: str) -> int:
+    query = query.strip()
+    if not query:
+        return 0
+    deleted = 0
+    with connection() as conn:
+        if _table_exists(conn, "ricordi"):
+            cur = conn.execute("DELETE FROM ricordi WHERE contenuto LIKE ?", (f"%{query}%",))
+            deleted += cur.rowcount
+    return deleted
+
+
+def init_agent_tables() -> None:
+    with connection() as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS idoma2_agent_devices (
+                device_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                last_seen TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS idoma2_agent_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'queued',
+                result TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_idoma2_agent_tasks_status
+                ON idoma2_agent_tasks(status, id);
+        """)
+
+
+def agent_heartbeat(device_id: str, device_name: str) -> None:
+    now = utc_now()
+    with connection() as conn:
+        conn.execute("""INSERT INTO idoma2_agent_devices(device_id, device_name, last_seen)
+            VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET
+            device_name=excluded.device_name, last_seen=excluded.last_seen""",
+            (device_id, device_name[:100], now))
+
+
+def agent_is_online(max_age_seconds: int = 25) -> bool:
+    from datetime import datetime, timedelta, timezone
+    with connection() as conn:
+        row = conn.execute("SELECT last_seen FROM idoma2_agent_devices ORDER BY last_seen DESC LIMIT 1").fetchone()
+    if not row:
+        return False
+    try:
+        seen = datetime.fromisoformat(row[0])
+        return datetime.now(timezone.utc) - seen <= timedelta(seconds=max_age_seconds)
+    except ValueError:
+        return False
+
+
+def queue_agent_task(action: str, payload: dict | None = None) -> int:
+    import json
+    now = utc_now()
+    with connection() as conn:
+        cur = conn.execute("""INSERT INTO idoma2_agent_tasks(action, payload, status, created_at, updated_at)
+            VALUES (?, ?, 'queued', ?, ?)""",
+            (action, json.dumps(payload or {}, ensure_ascii=False), now, now))
+        return int(cur.lastrowid)
+
+
+def claim_agent_task() -> dict | None:
+    import json
+    now = utc_now()
+    with connection() as conn:
+        row = conn.execute("SELECT id, action, payload FROM idoma2_agent_tasks WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
+        if not row:
+            return None
+        cur = conn.execute("UPDATE idoma2_agent_tasks SET status='running', updated_at=? WHERE id=? AND status='queued'", (now, row[0]))
+        if cur.rowcount != 1:
+            return None
+        return {"id": row[0], "action": row[1], "payload": json.loads(row[2] or "{}")}
+
+
+def finish_agent_task(task_id: int, result: str, success: bool) -> None:
+    with connection() as conn:
+        conn.execute("UPDATE idoma2_agent_tasks SET status=?, result=?, updated_at=? WHERE id=?",
+                     ("done" if success else "failed", result[:12000], utc_now(), task_id))
+
+
+def get_agent_task(task_id: int) -> dict | None:
+    """Return the status/result of one desktop task without changing it."""
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT id, action, status, result, created_at, updated_at FROM idoma2_agent_tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def save_memory_fact(category: str, subject: str, value: str, aliases: list[str] | None = None, source: str = "utente") -> None:
+    """Save or update a structured personal fact without touching legacy memory tables."""
+    import json
+    category = " ".join(category.split()).strip().casefold()[:60]
+    subject = " ".join(subject.split()).strip()[:120]
+    value = " ".join(value.split()).strip()[:500]
+    clean_aliases = []
+    for alias in aliases or []:
+        alias = " ".join(str(alias).split()).strip()[:120]
+        if alias and alias.casefold() not in {x.casefold() for x in clean_aliases}:
+            clean_aliases.append(alias)
+    if not category or not subject or not value:
+        raise ValueError("Categoria, concetto e valore sono obbligatori.")
+    now = utc_now()
+    with connection() as conn:
+        conn.execute("""INSERT INTO idoma2_memory_facts
+            (category, subject, value, aliases, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(category, subject) DO UPDATE SET
+            value=excluded.value, aliases=excluded.aliases, source=excluded.source, updated_at=excluded.updated_at""",
+            (category, subject, value, json.dumps(clean_aliases, ensure_ascii=False), source[:80], now, now))
+
+
+def list_memory_facts(limit: int = 100) -> list[dict]:
+    import json
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM idoma2_memory_facts ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["aliases"] = json.loads(item.get("aliases") or "[]")
+        except (TypeError, json.JSONDecodeError):
+            item["aliases"] = []
+        item["content"] = f"{item['subject']}: {item['value']}" + (f" (alias: {', '.join(item['aliases'])})" if item["aliases"] else "")
+        item["type"] = "fatto_personale"
+        result.append(item)
+    return result
+
+
+def find_memory_aliases(query: str, limit: int = 8) -> list[str]:
+    """Return values associated with a concept/alias mentioned in a file search."""
+    import json
+    import unicodedata
+    def norm(value: str) -> str:
+        value = unicodedata.normalize("NFKD", value.casefold())
+        value = "".join(ch for ch in value if not unicodedata.combining(ch))
+        return " ".join(re.findall(r"[a-z0-9]+", value))
+    q = norm(query)
+    if not q:
+        return []
+    with connection() as conn:
+        rows = conn.execute("SELECT subject, value, aliases FROM idoma2_memory_facts ORDER BY updated_at DESC LIMIT 300").fetchall()
+    found = []
+    for row in rows:
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, json.JSONDecodeError):
+            aliases = []
+        labels = [row["subject"], *aliases]
+        if any(norm(label) == q for label in labels if label):
+            if row["value"] not in found:
+                found.append(row["value"])
+    return found[:limit]
+
+
+def forget_memory_facts(query: str) -> int:
+    """Delete structured facts matching a user-requested concept or value."""
+    query = " ".join(query.casefold().split()).strip()
+    if not query:
+        return 0
+    import json
+    deleted = 0
+    with connection() as conn:
+        rows = conn.execute("SELECT id, subject, value, aliases FROM idoma2_memory_facts").fetchall()
+        ids = []
+        for row in rows:
+            try:
+                aliases = json.loads(row["aliases"] or "[]")
+            except (TypeError, json.JSONDecodeError):
+                aliases = []
+            fields = [row["subject"], row["value"], *aliases]
+            if any(query == str(field).casefold().strip() or query in str(field).casefold() for field in fields):
+                ids.append(row["id"])
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            cur = conn.execute(f"DELETE FROM idoma2_memory_facts WHERE id IN ({placeholders})", ids)
+            deleted = cur.rowcount
+    return deleted
+
+
+def get_indexed_document(path: str) -> dict | None:
+    """Return one cached document entry, if it has already been indexed."""
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT path, modified_ns, size_bytes, extension, content, indexed_at FROM idoma2_document_index WHERE path=?",
+            (path,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def upsert_indexed_document(path: str, modified_ns: int, size_bytes: int, extension: str, content: str) -> None:
+    """Store extracted local document text for fast subsequent searches."""
+    upsert_indexed_documents([(path, modified_ns, size_bytes, extension, content)])
+
+
+def upsert_indexed_documents(entries: list[tuple[str, int, int, str, str]]) -> None:
+    """Batch-update changed documents with one SQLite transaction."""
+    if not entries:
+        return
+    now = utc_now()
+    rows = [(path, int(modified_ns), int(size_bytes), extension.casefold(), content[:80000], now)
+            for path, modified_ns, size_bytes, extension, content in entries]
+    with connection() as conn:
+        conn.executemany("""INSERT INTO idoma2_document_index
+            (path, modified_ns, size_bytes, extension, content, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+            modified_ns=excluded.modified_ns, size_bytes=excluded.size_bytes,
+            extension=excluded.extension, content=excluded.content, indexed_at=excluded.indexed_at""", rows)
+
+
+def list_indexed_document_metadata() -> list[dict]:
+    """Read lightweight cache metadata without loading document text into memory."""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT path, modified_ns, size_bytes, extension FROM idoma2_document_index"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_indexed_documents() -> list[dict]:
+    """List cached document text; callers filter stale paths before use."""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT path, modified_ns, size_bytes, extension, content, indexed_at FROM idoma2_document_index"
+        ).fetchall()
+    return [dict(row) for row in rows]

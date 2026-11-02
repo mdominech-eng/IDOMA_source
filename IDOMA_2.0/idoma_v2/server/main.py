@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import secrets
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from ..config import APP_NAME, APP_VERSION, CORS_ORIGINS
+from ..db import (
+    init_db, list_conversations, get_messages, get_legacy_memories, list_memory_facts, conversation_exists,
+    agent_heartbeat, claim_agent_task, finish_agent_task, get_agent_task,
+)
+from ..security import get_api_token
+from ..services.assistant import process_message, new_conversation, tool_catalog
+
+WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+TOKEN = get_api_token()
+
+app = FastAPI(title=f"{APP_NAME} API", version=APP_VERSION)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+bearer = HTTPBearer(auto_error=False)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
+
+
+def require_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer)) -> None:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Token mancante.")
+    if not secrets.compare_digest(credentials.credentials, TOKEN):
+        raise HTTPException(status_code=403, detail="Token non valido.")
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=10000)
+    conversation_id: str | None = None
+
+
+class AgentHeartbeat(BaseModel):
+    device_id: str = Field(min_length=1, max_length=100)
+    device_name: str = Field(min_length=1, max_length=100)
+
+
+class AgentResult(BaseModel):
+    task_id: int
+    result: str = Field(max_length=12000)
+    success: bool
+
+
+@app.get("/api/health")
+def health() -> dict:
+    return {"status": "ok", "app": APP_NAME, "version": APP_VERSION}
+
+
+@app.get("/api/conversations", dependencies=[Depends(require_token)])
+def conversations() -> list[dict]:
+    return list_conversations()
+
+
+@app.post("/api/conversations", dependencies=[Depends(require_token)])
+def create_new_conversation() -> dict:
+    return new_conversation()
+
+
+@app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_token)])
+def conversation_messages(conversation_id: str) -> list[dict]:
+    if not conversation_exists(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return get_messages(conversation_id, 100)
+
+
+@app.post("/api/chat", dependencies=[Depends(require_token)])
+def chat(request: ChatRequest) -> dict:
+    try:
+        return process_message(request.message, request.conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/memory", dependencies=[Depends(require_token)])
+def memory() -> list[dict]:
+    return get_legacy_memories(100) + list_memory_facts(100)
+
+
+@app.get("/api/tools", dependencies=[Depends(require_token)])
+def available_tools() -> list[dict]:
+    """List capabilities available through the connected Windows agent."""
+    return tool_catalog()
+
+
+@app.post("/api/agent/heartbeat", dependencies=[Depends(require_token)])
+def desktop_agent_heartbeat(request: AgentHeartbeat) -> dict:
+    agent_heartbeat(request.device_id, request.device_name)
+    return {"status": "online"}
+
+
+@app.post("/api/agent/claim", dependencies=[Depends(require_token)])
+def desktop_agent_claim(request: AgentHeartbeat) -> dict:
+    agent_heartbeat(request.device_id, request.device_name)
+    return {"task": claim_agent_task()}
+
+
+@app.post("/api/agent/result", dependencies=[Depends(require_token)])
+def desktop_agent_result(request: AgentResult) -> dict:
+    finish_agent_task(request.task_id, request.result, request.success)
+    return {"status": "recorded"}
+
+
+@app.get("/api/agent/tasks/{task_id}", dependencies=[Depends(require_token)])
+def desktop_agent_task_status(task_id: int) -> dict:
+    task = get_agent_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Attività non trovata.")
+    return task
+
+
+@app.get("/")
+def home():
+    return FileResponse(WEB_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

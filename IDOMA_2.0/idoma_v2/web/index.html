@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10141d">
+  <meta name="description" content="IDOMA, il tuo assistente personale.">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <title>IDOMA</title>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="brand-mark">I</div><div><strong>IDOMA</strong><small>PERSONAL AI</small></div></div>
+      <button class="new-chat" id="newChat">＋ <span>Nuova conversazione</span></button>
+      <div class="side-label">LE TUE CONVERSAZIONI</div>
+      <div class="conversation-list" id="conversationList"></div>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="status-dot" id="statusDot"></span><span id="connectionText">Connessione non verificata</span></div>
+        <button class="settings-button" id="openSettings">⚙ Impostazioni</button>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Apri menu">☰</button>
+        <div><span class="top-title">Il tuo spazio personale</span><span class="top-subtitle">Un'intelligenza, i tuoi strumenti, la tua memoria.</span></div>
+        <div class="top-right"><span class="secure-pill">● PRIVATO</span></div>
+      </header>
+
+      <section class="chat-area" id="chatArea">
+        <div class="welcome" id="welcome">
+          <div class="orb"><div class="orb-core"></div></div>
+          <p class="eyebrow">IL TUO ASSISTENTE PERSONALE</p>
+          <h1>Da dove<br><span>cominciamo?</span></h1>
+          <p class="welcome-copy">Sono IDOMA. Posso aiutarti a ragionare, organizzare informazioni e costruire il tuo spazio digitale personale.</p>
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Presentati e spiegami cosa puoi fare.">✦ <span>Presentati</span></button>
+            <button class="suggestion" data-prompt="/memoria">◈ <span>La mia memoria</span></button>
+            <button class="suggestion" data-prompt="Aiutami a organizzare la mia giornata.">⌁ <span>Organizza la giornata</span></button>
+          </div>
+        </div>
+        <div class="messages" id="messages" aria-live="polite"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="composer">
+          <textarea id="messageInput" rows="1" placeholder="Scrivi a IDOMA..." aria-label="Messaggio"></textarea>
+          <button class="send-button" id="sendButton" aria-label="Invia messaggio">↑</button>
+        </div>
+        <div class="composer-note">IDOMA può commettere errori. Verifica le informazioni importanti.</div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="settingsModal">
+    <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-heading"><div><p class="eyebrow">CONFIGURAZIONE</p><h2 id="settingsTitle">Collega IDOMA</h2></div><button id="closeSettings" class="close-button" aria-label="Chiudi">×</button></div>
+      <p class="settings-description">Inserisci l'indirizzo del server IDOMA e il tuo token personale. I dati restano salvati su questo dispositivo.</p>
+      <label for="apiUrl">Indirizzo server</label>
+      <input id="apiUrl" type="url" placeholder="https://il-tuo-server.example.com" autocomplete="url">
+      <label for="apiToken">Token personale</label>
+      <input id="apiToken" type="password" placeholder="Incolla il token generato da IDOMA" autocomplete="off">
+      <div class="modal-actions"><button class="secondary-button" id="cancelSettings">Annulla</button><button class="primary-button" id="saveSettings">Salva e verifica</button></div>
+      <p class="settings-footnote">Non condividere il token: consente l'accesso alla tua memoria e alle tue conversazioni.</p>
+      <div id="settingsStatus" class="settings-status"></div>
+    </section>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

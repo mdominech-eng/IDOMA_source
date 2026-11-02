@@ -163,7 +163,7 @@ class IdomaTrayController(QObject):
             return False
         try:
             import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Run") as key:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
                 value, _ = winreg.QueryValueEx(key, "IDOMA")
                 return bool(value)
         except (OSError, FileNotFoundError):
@@ -174,7 +174,7 @@ class IdomaTrayController(QObject):
             return
         try:
             import winreg
-            key_path = r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
                 if enabled:
                     winreg.SetValueEx(key, "IDOMA", 0, winreg.REG_SZ, self.autostart_command())

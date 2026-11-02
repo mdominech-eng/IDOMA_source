@@ -13,7 +13,7 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 load_dotenv(RELEASE_DIR / ".env", override=False)
 
 APP_NAME = "IDOMA"
-APP_VERSION = "2.3.4"
+APP_VERSION = "2.3.6"
 DB_PATH = Path(os.getenv("IDOMA_DB_PATH", str(PROJECT_ROOT / "personal_ai.db"))).expanduser()
 OLLAMA_URL = os.getenv("IDOMA_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 OLLAMA_MODEL = os.getenv("IDOMA_OLLAMA_MODEL", "qwen3:1.7b")

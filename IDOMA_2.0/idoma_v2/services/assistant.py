@@ -6,7 +6,7 @@ import json
 from ..db import (
     create_conversation, conversation_exists, get_messages, save_message,
     update_conversation, search_legacy_memories, get_legacy_memories,
-    add_legacy_memory, forget_legacy_memory, agent_is_online, queue_agent_task,
+    add_legacy_memory, forget_legacy_memory, agent_is_online, queue_agent_task, get_agent_task,
     list_memory_facts, forget_memory_facts, link_agent_task_message,
 )
 from ..providers.router import ask_ai, ProviderUnavailable

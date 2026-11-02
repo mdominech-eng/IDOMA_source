@@ -155,7 +155,11 @@ def list_conversations(limit: int = 50) -> list[dict]:
 def get_messages(conversation_id: str, limit: int = 40) -> list[dict]:
     with connection() as conn:
         rows = conn.execute(
-            "SELECT role, content, created_at FROM idoma2_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?",
+            "SELECT m.role, m.content, m.created_at, tm.task_id AS agent_task_id, t.status AS agent_task_status "
+            "FROM idoma2_messages AS m "
+            "LEFT JOIN idoma2_agent_task_messages AS tm ON tm.message_id = m.id "
+            "LEFT JOIN idoma2_agent_tasks AS t ON t.id = tm.task_id "
+            "WHERE m.conversation_id = ? ORDER BY m.id DESC LIMIT ?",
             (conversation_id, limit),
         ).fetchall()
     return [dict(row) for row in reversed(rows)]

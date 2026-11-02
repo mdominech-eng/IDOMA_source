@@ -178,3 +178,11 @@ Test automatici della release: 44 test superati.
 - Il recupero automatico di vecchie istruzioni di memoria è limitato alla conversazione attiva.
 - Il contesto strutturato inviato al modello viene filtrato in base alla richiesta, anziché includere indiscriminatamente tutti i fatti.
 - Le richieste negative come `Non aprire Spotify` o `Non cercare il PDF` non vengono trasformate in azioni desktop.
+
+
+## IDOMA 2.3.4 — attività desktop senza bloccare la chat
+
+- Le richieste Windows vengono messe in coda e confermate subito, senza bloccare la risposta per 14–38 secondi.
+- La chat controlla lo stato dell'attività e aggiorna il messaggio quando l'agente Windows termina.
+- Il risultato finale viene salvato nella conversazione; se l'utente cambia chat e torna in seguito, IDOMA riprende il controllo delle attività ancora in corso.
+- La coda collega ogni attività al messaggio che l'ha generata e gestisce anche il caso in cui l'agente termini prima che il collegamento sia stato registrato.

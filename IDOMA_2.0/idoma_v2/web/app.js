@@ -63,8 +63,14 @@ async function loadConversations() {
 async function openConversation(id) {
   state.conversationId = id; clearMessages();
   const items = await api(`/api/conversations/${encodeURIComponent(id)}/messages`);
-  if (items.length) for (const item of items) addMessage(item.role, item.content);
-  else $('welcome').classList.remove('hidden');
+  if (items.length) {
+    for (const item of items) {
+      const body = addMessage(item.role, item.content);
+      if (item.agent_task_id && ['queued', 'running'].includes(item.agent_task_status)) {
+        pollAgentTask(item.agent_task_id, body);
+      }
+    }
+  } else $('welcome').classList.remove('hidden');
   await loadConversations();
   $('sidebar').classList.remove('open');
 }
@@ -94,32 +100,32 @@ async function sendMessage(text = null) {
   } catch (error) {
     typing.remove();
     if (state.conversationId === requestConversationId) {
-      addMessage('assistant', `Non riesco a completare la richiesta: ${error.message}\\n\\nApri Impostazioni e verifica indirizzo server e token.`);
+      addMessage('assistant', `Non riesco a completare la richiesta: ${error.message}\n\nApri Impostazioni e verifica indirizzo server e token.`);
     }
     setConnection(false, 'Errore di connessione');
   } finally { setBusy(false); $('messageInput').focus(); }
 }
 
 async function pollAgentTask(taskId, messageBody, attempt = 0) {
-  if (!messageBody || !messageBody.isConnected) return;
+  if (!messageBody) return;
   if (attempt >= 180) {
-    messageBody.textContent = `L'attività #${taskId} è ancora in corso. Puoi continuare a usare IDOMA; il risultato sarà salvato nella conversazione.`;
+    if (messageBody.isConnected) messageBody.textContent = `L'attività #${taskId} è ancora in corso. Puoi continuare a usare IDOMA; il risultato sarà salvato nella conversazione.`;
     return;
   }
   try {
     const task = await api(`/api/agent/tasks/${encodeURIComponent(taskId)}`);
     if (task.status === 'done') {
-      messageBody.textContent = `Fatto: ${task.result || 'operazione completata.'}`;
+      if (messageBody.isConnected) messageBody.textContent = `Fatto: ${task.result || 'operazione completata.'}`;
       return;
     }
     if (task.status === 'failed') {
-      messageBody.textContent = `Non sono riuscito a completare l'attività: ${task.result || 'errore non specificato.'}`;
+      if (messageBody.isConnected) messageBody.textContent = `Non sono riuscito a completare l'attività: ${task.result || 'errore non specificato.'}`;
       return;
     }
-    messageBody.textContent = `IDOMA sta lavorando sul PC… (attività #${taskId})`;
+    if (messageBody.isConnected) messageBody.textContent = `IDOMA sta lavorando sul PC… (attività #${taskId})`;
   } catch (error) {
     if (attempt >= 5) {
-      messageBody.textContent = `Non riesco a verificare lo stato dell'attività #${taskId}. Il PC potrebbe comunque completarla; riapri la conversazione per controllare il risultato.`;
+      if (messageBody.isConnected) messageBody.textContent = `Non riesco a verificare lo stato dell'attività #${taskId}. Il PC potrebbe comunque completarla; riapri la conversazione per controllare il risultato.`;
       return;
     }
   }

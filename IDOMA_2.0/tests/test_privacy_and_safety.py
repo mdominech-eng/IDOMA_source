@@ -51,6 +51,15 @@ class DesktopTaskLifecycleTests(unittest.TestCase):
         messages = db.get_messages(result["conversation_id"])
         self.assertIn("Ti aggiornerò qui", messages[-1]["content"])
 
+    def test_messages_include_pending_task_state_for_reopened_conversation(self):
+        conversation = assistant.new_conversation()
+        task_id = db.queue_agent_task("open_folder", {"folder": "documents"})
+        message_id = db.save_message(conversation["id"], "assistant", "Operazione in corso")
+        db.link_agent_task_message(task_id, message_id)
+        item = db.get_messages(conversation["id"])[-1]
+        self.assertEqual(item["agent_task_id"], task_id)
+        self.assertEqual(item["agent_task_status"], "queued")
+
     def test_task_completion_updates_pending_chat_message(self):
         conversation = assistant.new_conversation()
         task_id = db.queue_agent_task("open_folder", {"folder": "documents"})

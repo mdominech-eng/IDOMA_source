@@ -1,4 +1,4 @@
-# IDOMA 2.5.0
+# IDOMA 2.6.0
 
 IDOMA è un assistente personale locale per Windows. Il PC ospita il motore, il database, l'agente desktop, il microfono e le notifiche. L'interfaccia web/PWA permette di usare la chat anche da un altro dispositivo quando il PC è acceso e raggiungibile tramite una connessione privata.
 
@@ -110,3 +110,16 @@ La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, prome
 ## Versione
 
 `2.5.0` — desktop Windows, voce locale, promemoria e briefing proattivi.
+
+
+## 2.6.0 — affidabilità delle azioni locali
+
+- Calcoli aritmetici semplici instradati a un valutatore Python sicuro, senza chiamare Ollama.
+- Memoria esplicita in linguaggio naturale per fatti personali generici e riconoscimento del modello del computer.
+- Creazione di promemoria anche con formulazioni come "crea un promemoria tra 1 minuto gallina".
+- Le richieste chiare di apertura applicazioni evitano un passaggio di classificazione LLM non necessario.
+- Pulsante nell'interfaccia per attivare/disattivare il servizio vocale locale del PC e indicatore di stato aggiornato in tempo reale.
+- Protezione da avvii multipli dell'app desktop tramite lock di istanza.
+- La memoria e i promemoria restano nel database locale esistente; non viene eseguito alcun reset.
+
+La pressione del pulsante vocale abilita o disabilita il listener desktop che attende "Hey IDOMA": non avvia una registrazione dal browser. Il microfono del PC e il servizio desktop devono essere attivi.

@@ -204,12 +204,15 @@ def build_evening_briefing(now: datetime | None = None) -> str:
         current = current.astimezone()
     tomorrow = current.date() + timedelta(days=1)
     items = list_reminders(False, 200)
+    due_today = []
     due_tomorrow = []
     overdue = []
     for item in items:
         due = datetime.fromisoformat(item["due_at"].replace("Z", "+00:00")).astimezone(current.tzinfo)
         if due.date() < current.date():
             overdue.append((item, due))
+        elif due.date() == current.date():
+            due_today.append((item, due))
         elif due.date() == tomorrow:
             due_tomorrow.append((item, due))
     sections = []
@@ -217,6 +220,11 @@ def build_evening_briefing(now: datetime | None = None) -> str:
         sections.append("Da recuperare:\n" + "\n".join(
             f"- #{item['id']} {item['title']} (scaduto il {due.strftime('%d/%m alle %H:%M')})"
             for item, due in overdue
+        ))
+    if due_today:
+        sections.append("Ancora oggi:\n" + "\n".join(
+            f"- #{item['id']} {item['title']} alle {due.strftime('%H:%M')}"
+            for item, due in due_today
         ))
     if due_tomorrow:
         sections.append("Domani:\n" + "\n".join(

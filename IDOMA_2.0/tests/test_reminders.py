@@ -63,8 +63,11 @@ class ReminderStorageTests(unittest.TestCase):
 
     def test_evening_briefing_shows_tomorrow(self):
         now = datetime(2026, 11, 2, 20, 0, tzinfo=timezone.utc)
+        db.create_reminder("Inviare preventivo", (now + timedelta(hours=1)).isoformat())
         db.create_reminder("Preparare presentazione", (now + timedelta(days=1, hours=2)).isoformat())
         result = build_evening_briefing(now)
+        self.assertIn("Ancora oggi", result)
+        self.assertIn("Inviare preventivo", result)
         self.assertIn("Domani", result)
         self.assertIn("Preparare presentazione", result)
         self.assertIn(chr(10), result)

@@ -14,7 +14,9 @@ from .tool_planner import detect_additional_tool, tool_catalog, is_negated_actio
 from .memory import (
     remember_file_alias, aliases_for_search, structured_memory_context,
     remember_personal_fact, personal_name_from_memory, parse_personal_memory_instruction,
+    remember_general_personal_fact, personal_device_from_memory,
 )
+from .fast_actions import calculate_if_expression
 from .reminders import handle_reminder_command
 
 SYSTEM_BASE = """Sei IDOMA, un assistente personale intelligente, affidabile e concreto.
@@ -72,6 +74,10 @@ def _special_memory_command(message: str, history: list[dict] | None = None) -> 
         name = personal_name_from_memory()
         return f"Ho memorizzato il tuo nome: {name}. Potrai chiedermi in qualsiasi momento come ti chiami."
 
+    remembered = remember_general_personal_fact(command)
+    if remembered is not None:
+        return f"Ho salvato nella memoria personale: {remembered}."
+
     if folded.startswith("/ricorda"):
         content = command[len("/ricorda"):].strip(" :\t")
         if not content:
@@ -92,6 +98,15 @@ def _special_memory_command(message: str, history: list[dict] | None = None) -> 
                 f"Ho anche bloccato il recupero automatico di '{query}' dalla cronologia. "
                 "Se vorrai conservarlo di nuovo, potrai chiedermelo esplicitamente.")
     return None
+
+
+def _personal_device_question(message: str) -> bool:
+    value = " ".join(message.casefold().split()).strip(" \t,.:;!?\"'")
+    return bool(re.fullmatch(
+        r"(?:idoma[, ]+)?(?:che computer uso|quale computer uso|che pc uso|quale pc uso|"
+        r"che portatile uso|quale portatile ho|che dispositivo uso)",
+        value,
+    ))
 
 
 def _personal_name_question(message: str) -> bool:
@@ -252,8 +267,8 @@ def _detect_desktop_action(message: str) -> tuple[str, dict] | None:
         {"role": "user", "content": message},
     ]
     fallback = _fallback_open_target(message)
-    # A direct URL is already unambiguous; do not ask the model to reinterpret it.
-    if fallback and fallback[1].get("target_type") == "website":
+    # A clear open request is deterministic; skip the slow LLM classification.
+    if fallback:
         return fallback
     try:
         parsed = _parse_action_json(ask_ai(prompt).content)
@@ -299,6 +314,12 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
         update_conversation(conversation_id, message[:70] or "Nuova conversazione")
 
     save_message(conversation_id, "user", message)
+
+    calculation = calculate_if_expression(message)
+    if calculation is not None:
+        save_message(conversation_id, "assistant", calculation)
+        return {"conversation_id": conversation_id, "reply": calculation, "provider": "local", "model": "python-calculator"}
+
     special = _special_memory_command(message, history_before)
     if special is not None:
         save_message(conversation_id, "assistant", special)
@@ -315,6 +336,12 @@ def process_message(message: str, conversation_id: str | None = None) -> dict:
         _recover_explicit_personal_facts(history_before)
         name = personal_name_from_memory(get_legacy_memories(100))
         reply = f"Ti chiami {name}." if name else "Non ho ancora memorizzato il tuo nome. Puoi dirmi: 'Ricorda che mi chiamo Marco'."
+        save_message(conversation_id, "assistant", reply)
+        return {"conversation_id": conversation_id, "reply": reply, "provider": "local", "model": "memory"}
+
+    if _personal_device_question(message):
+        device = personal_device_from_memory()
+        reply = f"Usi un {device}." if device else "Non ho ancora memorizzato il modello del tuo computer. Puoi dirmi: 'Ricorda che ti scrivo da un Lenovo IdeaPad Flex 5'."
         save_message(conversation_id, "assistant", reply)
         return {"conversation_id": conversation_id, "reply": reply, "provider": "local", "model": "memory"}
 

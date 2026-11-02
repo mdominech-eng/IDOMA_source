@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 import unicodedata
-from ..db import save_memory_fact, list_memory_facts, find_memory_aliases, is_memory_suppressed, clear_memory_suppression
+from ..db import (save_memory_fact, list_memory_facts, find_memory_aliases, is_memory_suppressed, clear_memory_suppression, add_legacy_memory, get_legacy_memories)
 
 
 def _normalise(value: str) -> str:
@@ -136,4 +136,77 @@ def personal_name_from_memory(legacy_memories: list[dict] | None = None) -> str 
                 name = match.group(1).strip()
                 if name and not is_memory_suppressed("personal", "nome", name):
                     return name[0].upper() + name[1:]
+    return None
+
+
+
+def parse_device_memory_instruction(message: str) -> tuple[str, list[str]] | None:
+    """Extract a computer/device model from an explicit remember instruction."""
+    text = " ".join(message.strip().split())
+    prefix = re.match(
+        r"^(?:idoma[, ]+)?(?:ricorda(?:ti)? che|tieni a mente che|non dimenticare che)\s+(.+)$",
+        text, flags=re.IGNORECASE,
+    )
+    if not prefix:
+        return None
+    fact = prefix.group(1).strip(" .!?")
+    patterns = (
+        r"^(?:ti scrivo|sto scrivendo) da\s+(?:un|una|il mio|la mia)?\s*(.+)$",
+        r"^(?:uso|utilizzo|ho)\s+(?:un|una|il mio|la mia)?\s*(?:computer|pc|portatile|laptop)?\s*(.+)$",
+        r"^(?:il mio|la mia)\s+(?:computer|pc|portatile|laptop)\s+(?:è|e')\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, fact, flags=re.IGNORECASE)
+        if not match:
+            continue
+        device = re.sub(r"\s+", " ", match.group(1).strip(" \t,.;:!?\"'“”‘’"))
+        if not device or len(device) > 120:
+            return None
+        device = re.sub(r"\blenovo\b", "Lenovo", device, flags=re.IGNORECASE)
+        device = re.sub(r"\bideapad\b", "IdeaPad", device, flags=re.IGNORECASE)
+        device = re.sub(r"\bflex\b", "Flex", device, flags=re.IGNORECASE)
+        if device and device[0].islower():
+            device = device[0].upper() + device[1:]
+        return device, ["computer", "PC", "portatile", "laptop", "dispositivo", "Lenovo"]
+    return None
+
+
+def remember_general_personal_fact(message: str, *, allow_override: bool = True) -> str | None:
+    """Save an explicit natural-language memory request, not arbitrary chat."""
+    text = " ".join(message.strip().split())
+    prefix = re.match(
+        r"^(?:idoma[, ]+)?(?:ricorda(?:ti)? che|tieni a mente che|non dimenticare che)\s+(.+)$",
+        text, flags=re.IGNORECASE,
+    )
+    if not prefix:
+        return None
+    fact = prefix.group(1).strip(" .!?")
+    if not fact or len(fact) > 500:
+        return None
+    device = parse_device_memory_instruction(message)
+    if device:
+        value, aliases = device
+        if is_memory_suppressed("personal", "computer", value) and not allow_override:
+            return None
+        if allow_override:
+            clear_memory_suppression("personal", "computer", value)
+        save_memory_fact("personal", "computer", value, aliases, source="istruzione_esplicita_utente")
+        add_legacy_memory(f"Computer: {value}", "istruzione_esplicita_utente")
+        return f"Computer: {value}"
+    if allow_override:
+        add_legacy_memory(fact, "istruzione_esplicita_utente")
+    return fact
+
+
+def personal_device_from_memory() -> str | None:
+    """Return the remembered computer model, preferring structured memory."""
+    for item in list_memory_facts(200):
+        if item.get("category") == "personal" and item.get("subject", "").casefold() in {"computer", "pc", "portatile"}:
+            value = str(item.get("value", "")).strip()
+            if value and not is_memory_suppressed("personal", "computer", value):
+                return value
+    for item in get_legacy_memories(200):
+        match = re.search(r"^computer:\s*(.+)$", str(item.get("content", "")), flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
     return None

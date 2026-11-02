@@ -9,7 +9,11 @@ _TIME = r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?"
 
 def is_reminder_intent(message: str) -> bool:
     value = message.casefold()
-    return bool(re.search(r"\b(?:ricordami|mi ricordi)\b|^\s*/promemoria\b", value))
+    return bool(re.search(
+        r"\b(?:ricordami|mi ricordi)\b|^\s*/promemoria\b|"
+        r"\b(?:crea|creami|imposta|aggiungi|programma)\s+(?:un\s+)?promemoria\b",
+        value,
+    ))
 
 
 def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[str, str] | None:
@@ -19,10 +23,23 @@ def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[s
     'ricordami di X tra 20 minuti', and 'ricordami di X il 03/11 alle 9'.
     """
     value = " ".join(message.strip().split())
-    prefix = re.match(r"^(?:(?:per favore|per piacere|per cortesia)[, ]+)?(?:idoma[, ]+)?(?:ricordami|mi ricordi)\s+(?:di\s+)?(.+)$", value, flags=re.IGNORECASE)
-    if not prefix:
+    creation = re.match(
+        r"^(?:(?:per favore|per piacere|per cortesia)[, ]+)?(?:idoma[, ]+)?"
+        r"(?:crea|creami|imposta|aggiungi|programma)\s+(?:un\s+)?promemoria\s+(.+)$",
+        value, flags=re.IGNORECASE,
+    )
+    prefix = re.match(
+        r"^(?:(?:per favore|per piacere|per cortesia)[, ]+)?(?:idoma[, ]+)?"
+        r"(?:ricordami|mi ricordi)\s+(?:di\s+)?(.+)$",
+        value, flags=re.IGNORECASE,
+    )
+    if creation:
+        details = creation.group(1).strip().rstrip(" .!?")
+        details = re.sub(r"^(?:per|di)\s+", "", details, flags=re.IGNORECASE)
+    elif prefix:
+        details = prefix.group(1).strip().rstrip(" .!?")
+    else:
         return None
-    details = prefix.group(1).strip().rstrip(" .!?")
     current = now or datetime.now().astimezone()
     if current.tzinfo is None:
         current = current.astimezone()
@@ -30,7 +47,27 @@ def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[s
     title = ""
     due: datetime | None = None
 
-    relative = re.match(
+    # Creation phrasing: "crea un promemoria tra 1 minuto gallina".
+    reverse_relative = re.match(
+        r"^(?:tra|fra)\s+(?P<count>\d{1,5})\s+(?P<unit>minuti|minuto|ore|ora|giorni|giorno)\s+(?:per\s+|di\s+|:)?(?P<title>.+)$",
+        details, flags=re.IGNORECASE,
+    )
+    relative = None
+    if reverse_relative:
+        title = reverse_relative.group("title").strip(" \t,.;:!?\"'“”‘’")
+        count = int(reverse_relative.group("count"))
+        unit = reverse_relative.group("unit").casefold()
+        if count < 1:
+            raise ValueError("Il promemoria deve essere impostato almeno un minuto nel futuro.")
+        delta = timedelta(minutes=count) if unit.startswith("minut") else (
+            timedelta(hours=count) if unit.startswith("or") else timedelta(days=count)
+        )
+        if delta > timedelta(days=365):
+            raise ValueError("Posso impostare un promemoria al massimo entro un anno.")
+        due = current + delta
+
+    if due is None:
+        relative = re.match(
         r"(?P<title>.+?)\s+(?:tra|fra)\s+(?P<count>\d{1,5})\s+(?P<unit>minuti|minuto|ore|ora|giorni|giorno)$",
         details,
         flags=re.IGNORECASE,

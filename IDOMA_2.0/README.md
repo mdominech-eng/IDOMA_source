@@ -118,8 +118,10 @@ La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, prome
 - Memoria esplicita in linguaggio naturale per fatti personali generici e riconoscimento del modello del computer.
 - Creazione di promemoria anche con formulazioni come "crea un promemoria tra 1 minuto gallina".
 - Le richieste chiare di apertura applicazioni evitano un passaggio di classificazione LLM non necessario.
-- Pulsante nell'interfaccia per attivare/disattivare il servizio vocale locale del PC e indicatore di stato aggiornato in tempo reale.
+- Pulsante push-to-talk nell'interfaccia, listener sempre attivo con «Hey IDOMA», stato del microfono e disponibilità dell'agente PC visibili in tempo reale.
+- Pannello Memoria personale per controllare le informazioni effettivamente salvate.
+- Gli errori di avvio nascosti vengono registrati in `%LOCALAPPDATA%\\IDOMA\\startup.log`.
 - Protezione da avvii multipli dell'app desktop tramite lock di istanza.
 - La memoria e i promemoria restano nel database locale esistente; non viene eseguito alcun reset.
 
-La pressione del pulsante vocale avvia una singola acquisizione dal microfono del PC (push-to-talk). Il listener sempre attivo può anche attendere "Hey IDOMA". L’audio viene elaborato localmente dal servizio desktop; il microfono e il servizio devono essere attivi.
+La pressione del pulsante vocale avvia una singola acquisizione dal microfono del PC (push-to-talk). Il listener sempre attivo può anche attendere "Hey IDOMA". L’audio viene elaborato localmente dal servizio desktop; il microfono e il servizio devono essere attivi. La voce può essere verificata dal pannello di stato e le informazioni salvate sono consultabili dal pulsante Memoria personale.

@@ -122,4 +122,4 @@ La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, prome
 - Protezione da avvii multipli dell'app desktop tramite lock di istanza.
 - La memoria e i promemoria restano nel database locale esistente; non viene eseguito alcun reset.
 
-La pressione del pulsante vocale abilita o disabilita il listener desktop che attende "Hey IDOMA": non avvia una registrazione dal browser. Il microfono del PC e il servizio desktop devono essere attivi.
+La pressione del pulsante vocale avvia una singola acquisizione dal microfono del PC (push-to-talk). Il listener sempre attivo può anche attendere "Hey IDOMA". L’audio viene elaborato localmente dal servizio desktop; il microfono e il servizio devono essere attivi.

@@ -109,7 +109,7 @@ La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, prome
 
 ## Versione
 
-`2.5.0` — desktop Windows, voce locale, promemoria e briefing proattivi.
+`2.6.0` — memoria naturale, azioni locali rapide, promemoria affidabili e controlli vocali desktop.
 
 
 ## 2.6.0 — affidabilità delle azioni locali
@@ -120,7 +120,7 @@ La suite copre memoria, instradamento dei comandi, sicurezza delle azioni, prome
 - Le richieste chiare di apertura applicazioni evitano un passaggio di classificazione LLM non necessario.
 - Pulsante push-to-talk nell'interfaccia, listener sempre attivo con «Hey IDOMA», stato del microfono e disponibilità dell'agente PC visibili in tempo reale.
 - Pannello Memoria personale per controllare le informazioni effettivamente salvate.
-- Gli errori di avvio nascosti vengono registrati in `%LOCALAPPDATA%\\IDOMA\\startup.log`.
+- Gli errori di avvio nascosti vengono registrati in `%LOCALAPPDATA%\IDOMA\startup.log`.
 - Protezione da avvii multipli dell'app desktop tramite lock di istanza.
 - La memoria e i promemoria restano nel database locale esistente; non viene eseguito alcun reset.
 

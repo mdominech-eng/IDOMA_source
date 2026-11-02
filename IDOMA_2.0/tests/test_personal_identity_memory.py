@@ -102,6 +102,14 @@ class PersonalIdentityMemoryTests(unittest.TestCase):
         self.assertIn("Ho salvato nella memoria personale", result["reply"])
         self.assertIn("preferisco risposte concise", " ".join(x["content"] for x in db.get_legacy_memories(20)))
 
+    def test_memory_panel_shows_persisted_personal_facts(self):
+        root = Path(__file__).parents[1] / "idoma_v2" / "web"
+        html = (root / "index.html").read_text(encoding="utf-8")
+        js = (root / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="openMemory"', html)
+        self.assertIn('id="memoryList"', html)
+        self.assertIn("api('/api/memory')", js)
+
 
 if __name__ == "__main__":
     unittest.main()

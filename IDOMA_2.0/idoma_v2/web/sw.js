@@ -1,4 +1,4 @@
-const CACHE = 'idoma-shell-v2.5.0';
+const CACHE = 'idoma-shell-v2.6.0';
 const CACHE_PREFIX = 'idoma-shell-';
 const FILES = [
   '/',

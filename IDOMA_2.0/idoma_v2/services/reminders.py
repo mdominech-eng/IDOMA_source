@@ -177,23 +177,23 @@ def build_daily_briefing(now: datetime | None = None) -> str:
 
     sections = []
     if overdue:
-        sections.append("Da recuperare:\\n" + "\\n".join(
+        sections.append("Da recuperare:\n" + "\n".join(
             f"- #{item['id']} {item['title']} (scaduto: {due.strftime('%H:%M del %d/%m')})"
             for item, due in overdue
         ))
     if due_today:
-        sections.append("Oggi:\\n" + "\\n".join(
+        sections.append("Oggi:\n" + "\n".join(
             f"- #{item['id']} {item['title']} alle {due.strftime('%H:%M')}"
             for item, due in due_today
         ))
     if upcoming:
-        sections.append("In arrivo:\\n" + "\\n".join(
+        sections.append("In arrivo:\n" + "\n".join(
             f"- #{item['id']} {item['title']} il {due.strftime('%d/%m alle %H:%M')}"
             for item, due in upcoming
         ))
     if not sections:
         return "Per oggi non risultano promemoria. Il calendario esterno non è ancora collegato a IDOMA."
-    return "Ecco il tuo riepilogo:\\n" + "\\n\\n".join(sections)
+    return "Ecco il tuo riepilogo:\n" + "\n\n".join(sections)
 
 
 def build_evening_briefing(now: datetime | None = None) -> str:
@@ -214,18 +214,18 @@ def build_evening_briefing(now: datetime | None = None) -> str:
             due_tomorrow.append((item, due))
     sections = []
     if overdue:
-        sections.append("Da recuperare:\\n" + "\\n".join(
+        sections.append("Da recuperare:\n" + "\n".join(
             f"- #{item['id']} {item['title']} (scaduto il {due.strftime('%d/%m alle %H:%M')})"
             for item, due in overdue
         ))
     if due_tomorrow:
-        sections.append("Domani:\\n" + "\\n".join(
+        sections.append("Domani:\n" + "\n".join(
             f"- #{item['id']} {item['title']} alle {due.strftime('%H:%M')}"
             for item, due in due_tomorrow
         ))
     if not sections:
         return "Per domani non risultano promemoria. Il calendario esterno non è ancora collegato a IDOMA."
-    return "Ecco cosa ti aspetta:\\n" + "\\n\\n".join(sections)
+    return "Ecco cosa ti aspetta:\n" + "\n\n".join(sections)
 
 
 def handle_reminder_command(message: str) -> str | None:

@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import idoma_v2.db as db
-from idoma_v2.services.reminders import parse_reminder_request, handle_reminder_command, build_daily_briefing
+from idoma_v2.services.reminders import parse_reminder_request, handle_reminder_command, build_daily_briefing, build_evening_briefing
 
 
 class ReminderParsingTests(unittest.TestCase):
@@ -60,6 +60,14 @@ class ReminderStorageTests(unittest.TestCase):
     def tearDown(self):
         self.db_patch.stop()
         self.tmp.cleanup()
+
+    def test_evening_briefing_shows_tomorrow(self):
+        now = datetime(2026, 11, 2, 20, 0, tzinfo=timezone.utc)
+        db.create_reminder("Preparare presentazione", (now + timedelta(days=1, hours=2)).isoformat())
+        result = build_evening_briefing(now)
+        self.assertIn("Domani", result)
+        self.assertIn("Preparare presentazione", result)
+        self.assertIn("\\n", result)
 
     def test_morning_and_evening_briefings_are_claimed_once_per_day(self):
         self.assertTrue(db.claim_briefing("morning", "2026-11-02"))

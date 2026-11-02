@@ -213,3 +213,8 @@ Le attività Windows rimaste nello stato `running` per oltre cinque minuti vengo
 
 
 Puoi chiedere **«Organizza la giornata»**, **«Cosa devo fare oggi?»** oppure usare `/oggi` per ottenere un riepilogo dei promemoria scaduti, di quelli previsti oggi e dei prossimi in programma. Il riepilogo non inventa eventi: segnala chiaramente che un calendario esterno non è ancora collegato.
+
+
+### Briefing proattivi
+
+IDOMA mostra un riepilogo automatico al mattino e alla sera, basato sui promemoria locali. Gli orari predefiniti sono **08:00** e **21:00**; puoi modificarli nel file `.env` tramite `IDOMA_MORNING_BRIEFING_TIME` e `IDOMA_EVENING_BRIEFING_TIME`. Lascia uno dei valori vuoto per disattivare quel riepilogo. Se IDOMA viene avviata entro quattro ore dall'orario previsto, recupera il riepilogo una sola volta.

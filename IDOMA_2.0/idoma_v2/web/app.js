@@ -6,6 +6,13 @@ const storage = {
 };
 
 function cleanUrl(value) { return value.trim().replace(/\/+$/, ''); }
+function setPrivacyMode(provider) {
+  const pill = $('privacyMode');
+  if (!pill) return;
+  const cloud = provider === 'cloud';
+  pill.textContent = cloud ? '● AI CLOUD' : '● AI LOCALE';
+  pill.classList.toggle('cloud', cloud);
+}
 function setConnection(ok, text) {
   $('statusDot').classList.toggle('online', ok);
   $('connectionText').textContent = text;
@@ -148,6 +155,7 @@ async function sendMessage(text = null) {
     state.conversationId = result.conversation_id;
     const assistantBody = addMessage('assistant', result.reply);
     if (result.pending && result.task_id) pollAgentTask(result.task_id, assistantBody);
+    setPrivacyMode(result.provider);
     setConnection(true, `Connesso · ${result.provider === 'unavailable' ? 'AI non disponibile' : result.provider}`);
     await loadConversations();
     await loadReminders();

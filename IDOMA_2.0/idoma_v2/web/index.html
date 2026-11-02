@@ -20,6 +20,7 @@
       <div class="side-label">PROMEMORIA</div>
       <div class="reminder-list" id="reminderList"><div class="reminder-empty">Nessun promemoria</div></div>
       <div class="sidebar-bottom">
+        <button class="settings-button" id="openMemory">◈ Memoria personale</button>
         <div class="connection"><span class="status-dot" id="statusDot"></span><span id="connectionText">Connessione non verificata</span></div>
         <button class="settings-button" id="openSettings">⚙ Impostazioni</button>
       </div>
@@ -53,7 +54,7 @@
           <button class="voice-button" id="voiceButton" type="button" aria-label="Parla con IDOMA" title="Premi e parla: usa il microfono locale del PC">🎙</button>
           <button class="send-button" id="sendButton" aria-label="Invia messaggio">↑</button>
         </div>
-        <div class="composer-note"><span id="voiceStatus">Verifica del servizio vocale…</span> · IDOMA può commettere errori. Verifica le informazioni importanti.</div>
+        <div class="composer-note"><span id="voiceStatus">Verifica del servizio vocale…</span> · <span id="agentStatus">Agente PC non verificato</span> · IDOMA può commettere errori. Verifica le informazioni importanti.</div>
       </footer>
     </main>
   </div>
@@ -69,6 +70,15 @@
       <div class="modal-actions"><button class="secondary-button" id="cancelSettings">Annulla</button><button class="primary-button" id="saveSettings">Salva e verifica</button></div>
       <p class="settings-footnote">Non condividere il token: consente l'accesso alla tua memoria e alle tue conversazioni.</p>
       <div id="settingsStatus" class="settings-status"></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="memoryModal">
+    <section class="settings-modal memory-modal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
+      <div class="modal-heading"><div><p class="eyebrow">SPAZIO PERSONALE</p><h2 id="memoryTitle">Memoria personale</h2></div><button id="closeMemory" class="close-button" aria-label="Chiudi">×</button></div>
+      <p class="settings-description">Queste sono le informazioni che IDOMA ha effettivamente salvato nel database locale.</p>
+      <div id="memoryList" class="memory-list"><div class="memory-empty">Caricamento memoria…</div></div>
+      <div class="modal-actions"><button class="secondary-button" id="refreshMemory">Aggiorna</button><button class="primary-button" id="doneMemory">Chiudi</button></div>
     </section>
   </div>
   <script src="/static/app.js"></script>

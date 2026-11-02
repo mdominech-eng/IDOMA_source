@@ -13,3 +13,12 @@
 #voiceStatus{color:#8ca9d2}
 #voiceStatus.listening{color:#8ee0b5}
 #voiceStatus.error{color:#f0a1a1}
+
+
+.memory-modal{max-height:min(80vh,760px);display:flex;flex-direction:column}
+.memory-list{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:48vh;margin-top:14px;padding-right:3px}
+.memory-item{padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);color:#dce5f2;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.memory-empty{padding:16px;color:var(--muted);font-size:12px;text-align:center}
+#agentStatus{color:#8ca9d2}
+#agentStatus.listening{color:#8ee0b5}
+#agentStatus.error{color:#e3b1a0}

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -11,7 +14,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .config import PACKAGE_DIR
-from .security import TOKEN_FILE, get_api_token
+from .security import get_api_token
 from .server.main import app as api_app
 
 
@@ -65,6 +68,51 @@ class AgentThread(QThread):
         self.stop_event.set()
 
 
+class VoiceThread(QThread):
+    status = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.stop_event = threading.Event()
+        self.conversation_id = None
+
+    def stop(self):
+        self.stop_event.set()
+
+    def send_command(self, command: str) -> str:
+        payload = {"message": command}
+        if self.conversation_id:
+            payload["conversation_id"] = self.conversation_id
+        request = urllib.request.Request(
+            f"{LOCAL_URL}/api/chat",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {get_api_token()}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=190) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = json.loads(exc.read().decode("utf-8")).get("detail", str(exc))
+            except Exception:
+                detail = str(exc)
+            raise RuntimeError(str(detail)) from exc
+        self.conversation_id = result.get("conversation_id") or self.conversation_id
+        return str(result.get("reply") or "Ho ricevuto la richiesta.")
+
+    def run(self):
+        try:
+            from .services.voice import VoiceAssistant
+            service = VoiceAssistant(self.status.emit, self.send_command, self.stop_event)
+            service.run_forever()
+        except Exception as exc:
+            self.status.emit(f"Ascolto vocale non disponibile: {exc}")
+
+
 class IdomaTrayController(QObject):
     def __init__(self, application: QApplication):
         super().__init__()
@@ -72,6 +120,9 @@ class IdomaTrayController(QObject):
         self.server_thread = ApiServerThread()
         self.agent_thread = AgentThread()
         self.agent_started = False
+        self.voice_thread = None
+        self.server_ready = False
+        self._shutting_down = False
 
         icon_path = PACKAGE_DIR / "web" / "icon-192.png"
         self.tray = QSystemTrayIcon(QIcon(str(icon_path)), self)
@@ -86,6 +137,12 @@ class IdomaTrayController(QObject):
         token_action.triggered.connect(self.copy_token)
         menu.addAction(token_action)
 
+        self.voice_action = QAction("Ascolto vocale attivo", self)
+        self.voice_action.setCheckable(True)
+        self.voice_action.setChecked(True)
+        self.voice_action.toggled.connect(self.set_voice_enabled)
+        menu.addAction(self.voice_action)
+
         menu.addSeparator()
         self.autostart_action = QAction("Avvia con Windows", self)
         self.autostart_action.setCheckable(True)
@@ -95,7 +152,7 @@ class IdomaTrayController(QObject):
 
         menu.addSeparator()
         exit_action = QAction("Esci da IDOMA", self)
-        exit_action.triggered.connect(self.shutdown)
+        exit_action.triggered.connect(self.application.quit)
         menu.addAction(exit_action)
 
         self.tray.setContextMenu(menu)
@@ -116,9 +173,12 @@ class IdomaTrayController(QObject):
         server = self.server_thread.server
         if server is not None and server.started:
             self.startup_timer.stop()
+            self.server_ready = True
             if not self.agent_started:
                 self.agent_started = True
                 self.agent_thread.start()
+            if self.voice_action.isChecked():
+                self.start_voice()
             self.tray.showMessage("IDOMA", "Server locale e agente desktop avviati.", QSystemTrayIcon.MessageIcon.Information, 3500)
         elif not self.server_thread.isRunning():
             self.startup_timer.stop()
@@ -140,6 +200,60 @@ class IdomaTrayController(QObject):
             self.tray.setToolTip("IDOMA · verifica il collegamento al PC")
             self.tray.showMessage("IDOMA", message, QSystemTrayIcon.MessageIcon.Warning, 4000)
         else:
+            self.tray.setToolTip("IDOMA · assistente personale")
+
+    def set_voice_enabled(self, enabled: bool):
+        if enabled:
+            if self.server_ready:
+                self.start_voice()
+        else:
+            self.stop_voice()
+
+    def start_voice(self):
+        if self.voice_thread is not None and self.voice_thread.isRunning():
+            return
+        self.voice_thread = VoiceThread()
+        self.voice_thread.status.connect(self.on_voice_status)
+        self.voice_thread.finished.connect(self.on_voice_finished)
+        self.voice_thread.start()
+
+    def stop_voice(self):
+        thread = self.voice_thread
+        if thread is None:
+            return
+        thread.stop()
+        if thread.isRunning():
+            thread.wait(30000)
+        if not thread.isRunning():
+            self.voice_thread = None
+
+    def on_voice_finished(self):
+        if self.voice_action.isChecked() and not self._shutting_down:
+            self.voice_action.blockSignals(True)
+            self.voice_action.setChecked(False)
+            self.voice_action.blockSignals(False)
+            self.tray.showMessage(
+                "IDOMA",
+                "Ascolto vocale terminato. Puoi riattivarlo dal menu.",
+                QSystemTrayIcon.MessageIcon.Warning,
+                5000,
+            )
+        if self.voice_thread is not None and not self.voice_thread.isRunning():
+            self.voice_thread = None
+
+    def on_voice_status(self, message: str):
+        lowered = message.casefold()
+        if "in ascolto" in lowered or "idoma è pronta" in lowered:
+            self.tray.setToolTip("IDOMA · ascolto vocale attivo")
+        elif "non disponibile" in lowered or "problema con" in lowered:
+            self.tray.setToolTip("IDOMA · verifica microfono o modelli vocali")
+            self.tray.showMessage(
+                "IDOMA",
+                message,
+                QSystemTrayIcon.MessageIcon.Warning,
+                6000,
+            )
+        elif "ascolto vocale disattivato" in lowered:
             self.tray.setToolTip("IDOMA · assistente personale")
 
     def on_server_error(self, message: str):
@@ -190,8 +304,12 @@ class IdomaTrayController(QObject):
             QMessageBox.warning(None, "IDOMA", f"Non riesco a modificare l'avvio automatico: {exc}")
 
     def shutdown(self):
+        if self._shutting_down:
+            return
+        self._shutting_down = True
         if hasattr(self, "startup_timer"):
             self.startup_timer.stop()
+        self.stop_voice()
         self.agent_thread.stop()
         if self.agent_thread.isRunning():
             self.agent_thread.wait(15000)
@@ -199,7 +317,6 @@ class IdomaTrayController(QObject):
         if self.server_thread.isRunning():
             self.server_thread.wait(7000)
         self.tray.hide()
-        self.application.quit()
 
 
 def main():

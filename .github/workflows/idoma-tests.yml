@@ -25,3 +25,5 @@ jobs:
         env:
           IDOMA_API_TOKEN: ci-test-token
         run: python -m unittest discover -s tests -v
+      - name: Check web JavaScript syntax
+        run: node --check idoma_v2/web/app.js

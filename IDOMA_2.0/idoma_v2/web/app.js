@@ -135,20 +135,21 @@ async function loadRuntimeStatus() {
   }
 }
 
-async function toggleVoice() {
-  const enabled = !state.voiceEnabled;
+async function requestVoiceInput() {
   const button = $('voiceButton');
+  const label = $('voiceStatus');
   if (button) button.disabled = true;
+  if (label) {
+    label.textContent = 'Attivo il microfono del PC…';
+    label.classList.remove('error');
+  }
   try {
-    await api('/api/voice/toggle', {
-      method: 'POST',
-      body: JSON.stringify({ enabled }),
-    });
+    await api('/api/voice/listen', { method: 'POST' });
+    if (label) label.textContent = 'Ti ascolto: parla adesso nel microfono del Lenovo.';
     await loadRuntimeStatus();
   } catch (error) {
-    const label = $('voiceStatus');
     if (label) {
-      label.textContent = 'Controllo vocale non riuscito: ' + error.message;
+      label.textContent = 'Microfono non disponibile: ' + error.message;
       label.classList.add('error');
     }
   } finally {
@@ -259,7 +260,7 @@ async function verifyConnection() {
 }
 
 $('sendButton').addEventListener('click', () => sendMessage());
-$('voiceButton').addEventListener('click', toggleVoice);
+$('voiceButton').addEventListener('click', requestVoiceInput);
 $('messageInput').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }
 });

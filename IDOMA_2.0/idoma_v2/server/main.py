@@ -103,6 +103,15 @@ def toggle_voice(request: VoiceToggleRequest) -> dict:
     return {"accepted": True, "enabled": request.enabled}
 
 
+@app.post("/api/voice/listen", dependencies=[Depends(require_token)])
+def request_voice_listen() -> dict:
+    controller = getattr(app.state, "idoma_controller", None)
+    if controller is None:
+        raise HTTPException(status_code=503, detail="Controllo vocale desktop non disponibile.")
+    controller.request_manual_voice()
+    return {"accepted": True, "mode": "push_to_talk"}
+
+
 @app.get("/api/conversations", dependencies=[Depends(require_token)])
 def conversations() -> list[dict]:
     return list_conversations()

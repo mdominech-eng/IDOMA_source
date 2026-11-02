@@ -230,5 +230,7 @@ document.querySelectorAll('.suggestion').forEach(button => button.addEventListen
 })();
 
 window.setInterval(() => {
-  if (storage.token) loadReminders();
+  if (!storage.token) return;
+  loadConversations().catch(() => {});
+  loadReminders();
 }, 60000);

@@ -9,6 +9,7 @@ import idoma_v2.db as db
 from idoma_v2.services import assistant
 from idoma_v2.services.memory import (
     parse_personal_memory_instruction, remember_personal_fact, personal_name_from_memory,
+    remember_general_personal_fact, personal_device_from_memory,
 )
 
 
@@ -85,6 +86,21 @@ class PersonalIdentityMemoryTests(unittest.TestCase):
         db.save_memory_fact("personal", "nome", "Marco", ["nome"])
         context = structured_memory_context("Dove si trova il mio curriculum?", 10)
         self.assertEqual(context, ["curriculum: CB (alias: CV)"])
+
+    def test_general_device_memory_is_saved_and_retrieved_without_ai(self):
+        saved = assistant.process_message("Ricorda che ti scrivo da un Lenovo Ideapad Flex 5")
+        self.assertIn("Lenovo IdeaPad Flex 5", saved["reply"])
+        self.assertEqual(saved["model"], "memory")
+        with patch.object(assistant, "ask_ai", side_effect=AssertionError("AI should not be called")):
+            result = assistant.process_message("Che computer uso?")
+        self.assertEqual(result["reply"], "Usi un Lenovo IdeaPad Flex 5.")
+        self.assertEqual(personal_device_from_memory(), "Lenovo IdeaPad Flex 5")
+
+    def test_generic_explicit_memory_instruction_is_not_sent_to_ai(self):
+        with patch.object(assistant, "ask_ai", side_effect=AssertionError("AI should not be called")):
+            result = assistant.process_message("Ricorda che preferisco risposte concise")
+        self.assertIn("Ho salvato nella memoria personale", result["reply"])
+        self.assertIn("preferisco risposte concise", " ".join(x["content"] for x in db.get_legacy_memories(20)))
 
 
 if __name__ == "__main__":

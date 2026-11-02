@@ -113,9 +113,13 @@ def _open_safe_url(url: str) -> str:
 
 
 def _try_registered_protocol(target: str) -> bool:
-    """Ask Windows to open an app's registered URI protocol, without a per-app list."""
-    scheme = target.strip().casefold()
-    if not re.fullmatch(r"[a-z][a-z0-9+.-]{0,39}", scheme):
+    """Open only a small allowlist of benign Windows application protocols."""
+    scheme = target.strip().casefold().rstrip(":")
+    allowed = {
+        "spotify", "steam", "ms-settings", "vscode", "slack",
+        "zoommtg", "msteams", "teams", "mailto", "discord",
+    }
+    if scheme not in allowed:
         return False
     try:
         os.startfile(f"{scheme}:")  # type: ignore[attr-defined]
@@ -604,8 +608,9 @@ def execute_task(action: str, payload: dict) -> str:
     if action == "open_url":
         url = str(payload.get("url", ""))
         parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
-            raise ValueError("Indirizzo web non valido.")
+        local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (parsed.scheme != "https" and not local_http) or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("Sono ammessi solo indirizzi HTTPS e HTTP verso il PC locale.")
         webbrowser.open(url)
         return f"Aperto il sito {url}."
 

@@ -75,5 +75,24 @@ class WindowsFolderIntentTests(unittest.TestCase):
             self.assertIn("Ho aperto il file CB.pdf", result)
 
 
+class ProtocolSafetyTests(unittest.TestCase):
+    def test_registered_protocols_are_allowlisted(self):
+        with patch.object(desktop_agent.os, "startfile", create=True) as startfile:
+            self.assertTrue(desktop_agent._try_registered_protocol("spotify"))
+            startfile.assert_called_once_with("spotify:")
+        self.assertFalse(desktop_agent._try_registered_protocol("powershell"))
+        self.assertFalse(desktop_agent._try_registered_protocol("file"))
+
+    def test_open_url_rejects_external_http(self):
+        with self.assertRaises(ValueError):
+            desktop_agent.execute_task("open_url", {"url": "http://example.com"})
+
+    def test_open_url_accepts_https_and_local_http(self):
+        with patch.object(desktop_agent.webbrowser, "open") as open_browser:
+            self.assertIn("Aperto", desktop_agent.execute_task("open_url", {"url": "https://example.com"}))
+            self.assertIn("Aperto", desktop_agent.execute_task("open_url", {"url": "http://127.0.0.1:8000"}))
+        self.assertEqual(open_browser.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

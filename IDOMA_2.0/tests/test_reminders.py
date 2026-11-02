@@ -125,7 +125,7 @@ class ReminderStorageTests(unittest.TestCase):
     def test_chat_creation_wording_persists_reminder(self):
         result = handle_reminder_command("Crea un promemoria tra 1 minuto 'gallina'")
         self.assertIn("gallina", result)
-        self.assertEqual(list_reminders()[0]["title"], "gallina")
+        self.assertEqual(db.list_reminders()[0]["title"], "gallina")
 
     def test_chat_command_creates_and_lists_reminders(self):
         result = handle_reminder_command("Ricordami di chiamare mamma domani alle 10")

@@ -45,6 +45,16 @@ class ReminderParsingTests(unittest.TestCase):
     def test_missing_time_requests_clarification(self):
         self.assertIsNone(parse_reminder_request("Ricordami di comprare il latte", self.now))
 
+    def test_creation_wording_with_time_before_title(self):
+        title, due = parse_reminder_request("Crea un promemoria tra 1 minuto 'gallina'", self.now)
+        self.assertEqual(title, "gallina")
+        self.assertEqual(due, "2026-11-02T11:01:00+00:00")
+
+    def test_create_reminder_intent_is_detected(self):
+        from idoma_v2.services.reminders import is_reminder_intent
+        self.assertTrue(is_reminder_intent("Crea un promemoria tra 1 minuto gallina"))
+
+
     def test_invalid_past_today_is_rejected(self):
         with self.assertRaises(ValueError):
             parse_reminder_request("Ricordami di chiamare oggi alle 9", self.now)
@@ -110,6 +120,12 @@ class ReminderStorageTests(unittest.TestCase):
         self.assertIn("Scadenza passata", result)
         self.assertIn("Chiamare mamma", result)
         self.assertIn("Riunione", result)
+
+
+    def test_chat_creation_wording_persists_reminder(self):
+        result = handle_reminder_command("Crea un promemoria tra 1 minuto 'gallina'")
+        self.assertIn("gallina", result)
+        self.assertEqual(list_reminders()[0]["title"], "gallina")
 
     def test_chat_command_creates_and_lists_reminders(self):
         result = handle_reminder_command("Ricordami di chiamare mamma domani alle 10")

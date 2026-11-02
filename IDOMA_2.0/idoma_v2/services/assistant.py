@@ -206,18 +206,6 @@ def _fallback_open_target(message: str) -> tuple[str, dict] | None:
     target = _clean_target_phrase(target)
     if not target or len(target) > 100:
         return None
-    canonical_apps = {
-        "spotify": "Spotify",
-        "steam": "Steam",
-        "discord": "Discord",
-        "chrome": "Google Chrome",
-        "google chrome": "Google Chrome",
-        "firefox": "Firefox",
-        "edge": "Microsoft Edge",
-        "vscode": "Visual Studio Code",
-        "visual studio code": "Visual Studio Code",
-    }
-    target = canonical_apps.get(target.casefold(), target)
     return "open_target", {"target": target, "target_type": "auto", "url": None}
 
 
@@ -281,6 +269,15 @@ def _detect_desktop_action(message: str) -> tuple[str, dict] | None:
     fallback = _fallback_open_target(message)
     # A clear open request is deterministic; skip the slow LLM classification.
     if fallback:
+        canonical_apps = {
+            "spotify": "Spotify", "steam": "Steam", "discord": "Discord",
+            "chrome": "Google Chrome", "google chrome": "Google Chrome",
+            "firefox": "Firefox", "edge": "Microsoft Edge",
+            "vscode": "Visual Studio Code", "visual studio code": "Visual Studio Code",
+        }
+        fallback[1]["target"] = canonical_apps.get(
+            fallback[1]["target"].casefold(), fallback[1]["target"]
+        )
         return fallback
     try:
         parsed = _parse_action_json(ask_ai(prompt).content)

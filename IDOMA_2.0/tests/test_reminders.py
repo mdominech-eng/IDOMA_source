@@ -67,7 +67,7 @@ class ReminderStorageTests(unittest.TestCase):
         result = build_evening_briefing(now)
         self.assertIn("Domani", result)
         self.assertIn("Preparare presentazione", result)
-        self.assertIn("\\n", result)
+        self.assertIn(chr(10), result)
 
     def test_morning_and_evening_briefings_are_claimed_once_per_day(self):
         self.assertTrue(db.claim_briefing("morning", "2026-11-02"))

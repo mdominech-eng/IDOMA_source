@@ -30,6 +30,9 @@ class WakePhraseTests(unittest.TestCase):
     def test_bare_wake_word_leaves_no_command(self):
         self.assertEqual(strip_wake_prefix("IDOMA"), "")
 
+    def test_discards_audio_before_wake_phrase(self):
+        self.assertEqual(strip_wake_prefix("rumore precedente, Hey IDOMA, apri Spotify"), "apri Spotify")
+
 
 if __name__ == "__main__":
     unittest.main()

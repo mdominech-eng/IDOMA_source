@@ -37,9 +37,19 @@ def is_wake_phrase(text: str) -> bool:
 
 
 def strip_wake_prefix(text: str) -> str:
-    """Remove a spoken wake phrase when the command follows it in one utterance."""
-    pattern = r"^\s*(?:(?:hey|ehi|hei|ei|ai)\s+)?(?:i\s+)?(?:idoma|idioma|doma)\b[\s,.:;!?-]*"
-    return re.sub(pattern, "", text, count=1, flags=re.IGNORECASE).strip()
+    """Remove wake words and any pre-wake audio picked up by the short ring buffer."""
+    spoken = text.strip()
+    phrase = re.search(
+        r"\b(?:hey|ehi|hei|ei|ai)[\s,.:;!?-]+(?:i\s+)?(?:idoma|idioma|doma)\b[\s,.:;!?-]*",
+        spoken,
+        flags=re.IGNORECASE,
+    )
+    if phrase:
+        return spoken[phrase.end():].strip()
+    # Vosk occasionally omits 'hey'; the wake listener has already confirmed
+    # the trigger, so remove the first IDOMA token even if the buffer starts earlier.
+    bare = re.search(r"\b(?:idoma|i\s+doma)\b[\s,.:;!?-]*", spoken, flags=re.IGNORECASE)
+    return spoken[bare.end():].strip() if bare else spoken
 
 
 class VoiceAssistant:

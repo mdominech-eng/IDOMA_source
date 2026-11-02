@@ -130,7 +130,11 @@ class VoiceThread(QThread):
     def __init__(self):
         super().__init__()
         self.stop_event = threading.Event()
+        self.manual_trigger = threading.Event()
         self.conversation_id = None
+
+    def request_manual_listen(self):
+        self.manual_trigger.set()
 
     def stop(self):
         self.stop_event.set()
@@ -163,7 +167,7 @@ class VoiceThread(QThread):
     def run(self):
         try:
             from .services.voice import VoiceAssistant
-            service = VoiceAssistant(self.status.emit, self.send_command, self.stop_event)
+            service = VoiceAssistant(self.status.emit, self.send_command, self.stop_event, self.manual_trigger)
             service.run_forever()
         except Exception as exc:
             self.status.emit(f"Ascolto vocale non disponibile: {exc}")
@@ -171,6 +175,7 @@ class VoiceThread(QThread):
 
 class IdomaTrayController(QObject):
     voice_toggle_requested = Signal(bool)
+    voice_manual_requested = Signal()
 
     def __init__(self, application: QApplication):
         super().__init__()
@@ -185,6 +190,7 @@ class IdomaTrayController(QObject):
         self._shutting_down = False
         api_app.state.idoma_controller = self
         self.voice_toggle_requested.connect(self.set_voice_enabled)
+        self.voice_manual_requested.connect(self.request_manual_listen)
 
         icon_path = PACKAGE_DIR / "web" / "icon-192.png"
         self.tray = QSystemTrayIcon(QIcon(str(icon_path)), self)
@@ -271,6 +277,15 @@ class IdomaTrayController(QObject):
     def request_voice_enabled(self, enabled: bool):
         """Thread-safe bridge from the local HTTP API to the Qt UI thread."""
         self.voice_toggle_requested.emit(bool(enabled))
+
+    def request_manual_voice(self):
+        """Enable the local listener if needed, then request one push-to-talk capture."""
+        self.voice_toggle_requested.emit(True)
+        self.voice_manual_requested.emit()
+
+    def request_manual_listen(self):
+        if self.voice_thread is not None:
+            self.voice_thread.request_manual_listen()
 
     def set_voice_enabled(self, enabled: bool):
         self.voice_action.blockSignals(True)

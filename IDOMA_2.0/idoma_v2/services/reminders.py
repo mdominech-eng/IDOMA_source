@@ -68,10 +68,10 @@ def parse_reminder_request(message: str, now: datetime | None = None) -> tuple[s
 
     if due is None:
         relative = re.match(
-        r"(?P<title>.+?)\s+(?:tra|fra)\s+(?P<count>\d{1,5})\s+(?P<unit>minuti|minuto|ore|ora|giorni|giorno)$",
-        details,
-        flags=re.IGNORECASE,
-    )
+            r"(?P<title>.+?)\s+(?:tra|fra)\s+(?P<count>\d{1,5})\s+(?P<unit>minuti|minuto|ore|ora|giorni|giorno)$",
+            details,
+            flags=re.IGNORECASE,
+        )
     if relative:
         title = relative.group("title")
         count = int(relative.group("count"))

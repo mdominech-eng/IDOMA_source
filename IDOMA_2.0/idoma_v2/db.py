@@ -410,7 +410,11 @@ def is_memory_suppressed(category: str, subject: str, value: str) -> bool:
         ).fetchall()
     for row in rows:
         blocked = " ".join(str(row[0]).casefold().split())
-        if blocked and (blocked in candidate or candidate in blocked):
+        if not blocked:
+            continue
+        if category == "personal" and subject in {"nome", "name"} and blocked in {"nome", "name"}:
+            return True
+        if blocked in candidate or candidate in blocked:
             return True
     return False
 

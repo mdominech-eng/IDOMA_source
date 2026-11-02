@@ -217,13 +217,15 @@ class IdomaTrayController(QObject):
         self.voice_thread.finished.connect(self.on_voice_finished)
         self.voice_thread.start()
 
-    def stop_voice(self):
+    def stop_voice(self, wait_for_exit: bool = False):
         thread = self.voice_thread
         if thread is None:
             return
         thread.stop()
-        if thread.isRunning():
-            thread.wait(30000)
+        # Toggling the microphone must not freeze the tray UI. During full
+        # shutdown we wait for the current transcription/TTS operation to finish.
+        if wait_for_exit and thread.isRunning():
+            thread.wait(60000)
         if not thread.isRunning():
             self.voice_thread = None
 
@@ -309,7 +311,7 @@ class IdomaTrayController(QObject):
         self._shutting_down = True
         if hasattr(self, "startup_timer"):
             self.startup_timer.stop()
-        self.stop_voice()
+        self.stop_voice(wait_for_exit=True)
         self.agent_thread.stop()
         if self.agent_thread.isRunning():
             self.agent_thread.wait(15000)

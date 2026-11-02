@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import array
 import json
+from collections import deque
 import math
 import os
 import re
@@ -33,6 +34,12 @@ def is_wake_phrase(text: str) -> bool:
         # Vosk sometimes drops the English 'hey' even when the user says it.
         return True
     return bool(re.search(r"\b(?:hey|ehi|hei|ei|ai)\s+(?:i\s+)?(?:doma|idoma|idioma)\b", value))
+
+
+def strip_wake_prefix(text: str) -> str:
+    """Remove a spoken wake phrase when the command follows it in one utterance."""
+    pattern = r"^\s*(?:(?:hey|ehi|hei|ei|ai)\s+)?(?:i\s+)?(?:idoma|idioma|doma)\b[\s,.:;!?-]*"
+    return re.sub(pattern, "", text, count=1, flags=re.IGNORECASE).strip()
 
 
 class VoiceAssistant:
@@ -113,10 +120,24 @@ class VoiceAssistant:
         except Exception as exc:
             self._status(f"Sintesi vocale non disponibile: {exc}")
 
-    def _listen_for_wake(self) -> bool:
+    def _decode_audio_chunks(self, chunks):
+        raw = b"".join(chunks)
+        audio = self._np.frombuffer(raw, dtype=self._np.int16).astype(self._np.float32) / 32768.0
+        return self._resample_audio(audio)
+
+    def _resample_audio(self, audio):
+        if self._sample_rate != TARGET_SAMPLE_RATE and len(audio):
+            new_length = max(1, int(len(audio) * TARGET_SAMPLE_RATE / self._sample_rate))
+            old_positions = self._np.arange(len(audio), dtype=self._np.float32)
+            new_positions = self._np.linspace(0, max(0, len(audio) - 1), new_length, dtype=self._np.float32)
+            audio = self._np.interp(new_positions, old_positions, audio).astype(self._np.float32)
+        return audio
+
+    def _listen_for_wake(self):
         from vosk import KaldiRecognizer
 
         recognizer = KaldiRecognizer(self._wake_model, self._sample_rate)
+        history = deque(maxlen=max(1, int(8 * self._sample_rate / AUDIO_BLOCK)))
         self._status("In ascolto: pronuncia «Hey IDOMA».")
         with self._sd.RawInputStream(
             samplerate=self._sample_rate,
@@ -127,16 +148,15 @@ class VoiceAssistant:
             while not self.stop_event.is_set():
                 data, _overflow = stream.read(AUDIO_BLOCK)
                 audio = bytes(data)
+                history.append(audio)
                 if recognizer.AcceptWaveform(audio):
                     phrase = json.loads(recognizer.Result()).get("text", "")
                     if is_wake_phrase(phrase):
-                        return True
+                        # Keep the phrase audio so Whisper can also hear a command
+                        # spoken immediately after "Hey IDOMA" in the same sentence.
+                        return self._decode_audio_chunks(list(history)), phrase
                     recognizer = KaldiRecognizer(self._wake_model, self._sample_rate)
-                else:
-                    partial = json.loads(recognizer.PartialResult()).get("partial", "")
-                    if is_wake_phrase(partial):
-                        return True
-        return False
+        return None
 
     def _capture_command(self):
         chunks = []
@@ -178,12 +198,7 @@ class VoiceAssistant:
         if not chunks or self.stop_event.is_set():
             return None
         audio = self._np.concatenate(chunks)
-        if self._sample_rate != TARGET_SAMPLE_RATE:
-            new_length = max(1, int(len(audio) * TARGET_SAMPLE_RATE / self._sample_rate))
-            old_positions = self._np.arange(len(audio), dtype=self._np.float32)
-            new_positions = self._np.linspace(0, max(0, len(audio) - 1), new_length, dtype=self._np.float32)
-            audio = self._np.interp(new_positions, old_positions, audio).astype(self._np.float32)
-        return audio
+        return self._resample_audio(audio)
 
     def _transcribe(self, audio) -> str:
         segments, _info = self._whisper.transcribe(
@@ -201,20 +216,25 @@ class VoiceAssistant:
         consecutive_audio_errors = 0
         while not self.stop_event.is_set():
             try:
-                if not self._listen_for_wake():
+                wake_result = self._listen_for_wake()
+                if wake_result is None:
                     continue
                 if self.stop_event.is_set():
                     break
                 consecutive_audio_errors = 0
                 self._status("IDOMA attivata.")
-                self._speak("Dimmi, ti ascolto.")
-                audio = self._capture_command()
-                if audio is None:
-                    if not self.stop_event.is_set():
-                        self._speak("Non ho sentito nulla. Riprova quando vuoi.")
-                    continue
-                self._status("Trascrivo il comando…")
-                command = self._transcribe(audio)
+                wake_audio, _wake_text = wake_result
+                self._status("Riconosco il comando…")
+                command = strip_wake_prefix(self._transcribe(wake_audio))
+                if not command:
+                    self._speak("Dimmi, ti ascolto.")
+                    audio = self._capture_command()
+                    if audio is None:
+                        if not self.stop_event.is_set():
+                            self._speak("Non ho sentito nulla. Riprova quando vuoi.")
+                        continue
+                    self._status("Trascrivo il comando…")
+                    command = self._transcribe(audio)
                 if not command:
                     self._speak("Non ho capito. Puoi ripetere?")
                     continue

@@ -10,7 +10,7 @@ import webbrowser
 from pathlib import Path
 from datetime import timedelta
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, QLockFile
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -433,8 +433,22 @@ def main():
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "IDOMA", "La barra delle applicazioni di Windows non è disponibile.")
         return 1
+    lock_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "IDOMA"
+    lock_root.mkdir(parents=True, exist_ok=True)
+    instance_lock = QLockFile(str(lock_root / "idoma.lock"))
+    if not instance_lock.tryLock(100):
+        QMessageBox.information(
+            None,
+            "IDOMA",
+            "IDOMA è già in esecuzione. Apri l'istanza già presente nell'area di notifica.",
+        )
+        return 0
+
     controller = IdomaTrayController(application)
-    return application.exec()
+    controller.instance_lock = instance_lock
+    exit_code = application.exec()
+    instance_lock.unlock()
+    return exit_code
 
 
 if __name__ == "__main__":

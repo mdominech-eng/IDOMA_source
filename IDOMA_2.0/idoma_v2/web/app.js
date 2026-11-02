@@ -120,10 +120,15 @@ async function loadMemory() {
       host.appendChild(empty);
       return;
     }
+    const seen = new Set();
     for (const item of items) {
+      const content = item.content || [item.subject, item.value].filter(Boolean).join(': ');
+      const key = content.trim().toLocaleLowerCase('it-IT');
+      if (!content || seen.has(key)) continue;
+      seen.add(key);
       const row = document.createElement('div');
       row.className = 'memory-item';
-      row.textContent = item.content || [item.subject, item.value].filter(Boolean).join(': ');
+      row.textContent = content;
       host.appendChild(row);
     }
   } catch (error) {
